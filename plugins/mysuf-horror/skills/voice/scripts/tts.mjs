@@ -5,8 +5,12 @@
 //   node tts.mjs <naskah.md|.txt> [--out narasi.wav|.mp3] [--voice Enceladus|voice_...]
 //                [--model gemini-3.8-flash-tts] [--style "..."] [--gap 0.2] [--dry-run] [--no-cache]
 //   node tts.mjs clone --source sampel.wav --consent persetujuan.wav [--name "Suara Saya"]
+//
+// Manual mode (Google AI Studio web, free, no API key):
+//   node tts.mjs prep <naskah.md> [--dir folder] [--voice Nama]   -> potongan.md + rencana.json
+//   node tts.mjs stitch <folder> [file1 file2 ...] [--out narasi.mp3] [--gap 0.4]
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, extname, basename } from 'node:path';
@@ -402,6 +406,184 @@ async function generate(opts) {
   console.log(`Subtitle: ${srt} (${cues.length} baris)`);
 }
 
+// ---------- manual mode (Google AI Studio web, no API key) ----------
+
+const CHUNK_MAX_WORDS = 45, CHUNK_MIN_WORDS = 8;
+const countWords = (t) => t.replace(/<[^<>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+
+// Group lines into a few paste-sized chunks. Medium/long pauses are natural beat breaks and
+// become exact silence when stitching; short pauses stay inline as AI Studio tags.
+export function buildChunks(items) {
+  const chunks = [];
+  let cur = null;
+  const close = () => {
+    if (!cur) return;
+    while (cur.text.length && cur.text[cur.text.length - 1] === '<short pause>') cur.text.pop();
+    chunks.push(cur);
+    cur = null;
+  };
+  for (const it of items) {
+    if (it.silence !== undefined) {
+      if (it.silence >= 1) { close(); if (chunks.length) chunks[chunks.length - 1].pauseAfter += it.silence; }
+      else if (cur) cur.text.push('<short pause>');
+      else if (chunks.length) chunks[chunks.length - 1].pauseAfter += it.silence;
+      continue;
+    }
+    cur ??= { text: [], lines: [], moods: [], pauseAfter: 0, words: 0 };
+    const style = it.style.join(', ');
+    if (cur.moods[cur.moods.length - 1]?.style !== style) cur.moods.push({ style, from: it.display });
+    cur.text.push(it.text);
+    if (it.display) cur.lines.push(it.display);
+    cur.words += countWords(it.text);
+    if (cur.words >= CHUNK_MAX_WORDS) close();
+  }
+  close();
+  // A chunk of a few words is not worth a separate take: fold it into its neighbour.
+  const mergeInto = (i) => {
+    const p = chunks[i - 1], c = chunks[i];
+    p.text.push(p.pauseAfter >= 1.5 ? '<long pause>' : '<short pause>', ...c.text);
+    p.lines.push(...c.lines);
+    for (const m of c.moods) if (p.moods[p.moods.length - 1].style !== m.style) p.moods.push(m);
+    p.words += c.words;
+    p.pauseAfter = c.pauseAfter;
+    chunks.splice(i, 1);
+  };
+  for (let i = chunks.length - 1; i > 0; i--) if (chunks[i].words < CHUNK_MIN_WORDS) mergeInto(i);
+  if (chunks.length > 1 && chunks[0].words < CHUNK_MIN_WORDS) mergeInto(1);
+  return chunks;
+}
+
+function chunkStyle(base, moods) {
+  const named = (s) => s || 'the base style';
+  if (moods.every((m) => !m.style)) return base;
+  if (moods.length === 1) return `${base}\nDelivery for this part: ${moods[0].style}.`;
+  const steps = moods.map((m, i) => {
+    if (i === 0) return `start ${named(m.style)}`;
+    const cue = m.from.replace(/["“”]/g, '').split(/\s+/).slice(0, 5).join(' ').replace(/[.,;:!?…]+$/, '');
+    return `from "${cue}..." switch to ${named(m.style)}`;
+  });
+  return `${base}\nDelivery for this part: ${steps.join('; ')}.`;
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|opus|flac|webm)$/i;
+
+async function prep(opts) {
+  const input = opts._[1];
+  if (!input) die('pakai: node tts.mjs prep <naskah.md|.txt> [--dir folder] [--voice Nama] [--style "..."]');
+  if (!existsSync(input)) die(`file tidak ada: ${input}`);
+  const dir = resolve(opts.dir || join(dirname(input), basename(input, extname(input)) + '-vo'));
+  const voice = opts.voice || DEFAULT_VOICE;
+  const { script, style } = readScript(readFileSync(input, 'utf8'), opts.style);
+  const warnings = [];
+  const chunks = buildChunks(parseLines(script, (w) => warnings.push(w)));
+  if (!chunks.length) die('tidak ada teks yang bisa dibacakan di naskah');
+  warnings.forEach((w) => console.warn(`  peringatan: ${w}`));
+
+  mkdirSync(dir, { recursive: true });
+  const md = [
+    '# Potongan VO untuk Google AI Studio',
+    '',
+    `Suara: **${voice}**. Pakai suara yang sama untuk semua potongan supaya narasinya seragam.`,
+    '',
+    '1. Buka https://aistudio.google.com, pilih **Generate Speech** (single speaker), pilih suara di atas.',
+    '2. Per potongan: tempel **Style instructions** dan **Teks**, klik Run, dengarkan. Ulangi Run kalau intonasinya kurang pas.',
+    `3. Download audionya ke folder ini dengan nama sesuai judul potongan: ${chunks.map((_, i) => `\`${pad2(i + 1)}.wav\``).join(', ')} (mp3/m4a juga boleh).`,
+    `4. Kalau semua sudah, gabungkan: \`node tts.mjs stitch "${dir}"\``,
+    '',
+  ];
+  chunks.forEach((c, i) => {
+    const label = c.moods.map((m) => m.style || 'dasar').join(' → ');
+    md.push(
+      `## ${pad2(i + 1)} · ${label} · ${c.words} kata (±${Math.round(c.words / 2.3)} dtk)`,
+      '',
+      '**Style instructions**',
+      '```text', chunkStyle(style, c.moods), '```',
+      '',
+      '**Teks**',
+      '```text', c.text.join('\n'), '```',
+      '',
+      c.pauseAfter ? `_Setelah potongan ini: hening ${c.pauseAfter.toFixed(2)} dtk (ditambahkan otomatis saat digabung)._` : '',
+      '',
+    );
+  });
+  writeFileSync(join(dir, 'potongan.md'), md.join('\n'));
+  writeFileSync(join(dir, 'rencana.json'), JSON.stringify({
+    voice,
+    chunks: chunks.map((c, i) => ({ file: pad2(i + 1), pauseAfter: c.pauseAfter, lines: c.lines })),
+  }, null, 2));
+  console.log(`Folder: ${dir}`);
+  console.log(`Potongan: ${chunks.length} (${chunks.map((c) => c.words).join(' + ')} kata) · suara ${voice}`);
+  console.log(`Petunjuk tempel: ${join(dir, 'potongan.md')}`);
+}
+
+// Leading/trailing silence trimmed (50 ms kept) so the planned pauses are the real pauses,
+// then each take normalized on its own: AI Studio takes come out at different levels.
+const TRIM = 'silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.05,areverse,'
+  + 'silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.05,areverse,'
+  + 'loudnorm=I=-16:TP=-1.5:LRA=11';
+
+function decodeTrimmed(path) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', path, '-af', TRIM,
+    '-ac', '1', '-ar', String(SAMPLE_RATE), '-f', 's16le', '-acodec', 'pcm_s16le', '-'], { maxBuffer: 1 << 30 });
+  if (r.status !== 0) die(`gagal membaca ${basename(path)}: ${r.stderr?.toString() || r.error}`);
+  if (!r.stdout.length) die(`${basename(path)} kosong atau hening semua`);
+  return r.stdout;
+}
+
+async function stitch(opts) {
+  const dir = opts._[1];
+  if (!dir) die('pakai: node tts.mjs stitch <folder-potongan> [file1 file2 ...] [--out narasi.mp3] [--gap 0.4]');
+  const planPath = join(dir, 'rencana.json');
+  if (!existsSync(planPath)) die(`rencana.json tidak ada di ${dir}; jalankan "prep" dulu`);
+  if (!hasFfmpeg()) die('ffmpeg tidak ditemukan; mode manual butuh ffmpeg untuk membaca file dari AI Studio');
+  const plan = JSON.parse(readFileSync(planPath, 'utf8'));
+  const gap = opts.gap !== undefined ? Number(opts.gap) : 0.4;
+  if (!Number.isFinite(gap) || gap < 0) die('--gap harus angka >= 0');
+
+  // Explicit file list wins; otherwise match 01.*, 02.* ... in the folder.
+  const explicit = opts._.slice(2);
+  if (explicit.length && explicit.length !== plan.chunks.length) {
+    die(`rencana punya ${plan.chunks.length} potongan tapi diberi ${explicit.length} file`);
+  }
+  const present = readdirSync(dir).filter((f) => AUDIO_EXT.test(f));
+  const missing = [];
+  const files = plan.chunks.map((c, i) => {
+    if (explicit.length) return resolve(explicit[i]);
+    const hit = present.find((f) => new RegExp(`^0*${i + 1}(?![0-9])`).test(f));
+    if (!hit) missing.push(`${c.file}.wav`);
+    return hit && join(dir, hit);
+  });
+  if (missing.length) die(`file belum ada di ${dir}: ${missing.join(', ')}`);
+  files.forEach((f) => { if (!existsSync(f)) die(`file tidak ada: ${f}`); });
+
+  const parts = [], cues = [];
+  let bytes = 0;
+  const push = (buf) => { parts.push(buf); bytes += buf.length; };
+  push(silencePcm(0.2));
+  plan.chunks.forEach((c, i) => {
+    const pcm = decodeTrimmed(files[i]);
+    const at = bytes / 2 / SAMPLE_RATE;
+    const [v0, v1] = voicedRange(pcm);
+    if (c.lines.length) cues.push(...timeLines(c.lines, at + v0, at + v1));
+    push(pcm);
+    console.log(`  ${c.file}: ${basename(files[i])} (${(pcm.length / 2 / SAMPLE_RATE).toFixed(1)} dtk)`);
+    if (i < plan.chunks.length - 1) push(silencePcm(c.pauseAfter || gap));
+  });
+  push(silencePcm(0.5));
+
+  const out = resolve(opts.out || join(dir, 'narasi.mp3'));
+  const tmp = join(tmpdir(), `vo-stitch-${process.pid}.wav`);
+  writeFileSync(tmp, pcmToWav(Buffer.concat(parts)));
+  const codec = extname(out).toLowerCase() === '.mp3' ? ['-codec:a', 'libmp3lame', '-q:a', '2'] : [];
+  ffmpeg(['-i', tmp, ...codec, out]);
+  rmSync(tmp, { force: true });
+  const srt = out.slice(0, out.length - extname(out).length) + '.srt';
+  writeFileSync(srt, toSrt(cues));
+  console.log(`\nSelesai: ${out} (${(bytes / 2 / SAMPLE_RATE).toFixed(1)} dtk)`);
+  console.log(`Subtitle: ${srt} (${cues.length} baris)`);
+}
+
 function loadAsWav24k(path) {
   if (!existsSync(path)) die(`file tidak ada: ${path}`);
   if (!hasFfmpeg()) {
@@ -463,6 +645,6 @@ async function clone(opts) {
 const isMain = process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2));
-  const run = opts._[0] === 'clone' ? clone : generate;
+  const run = { clone, prep, stitch }[opts._[0]] ?? generate;
   run(opts).catch((e) => die(e.message));
 }

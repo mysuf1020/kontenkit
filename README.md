@@ -53,17 +53,16 @@ Mau diubah? Bilang saja, misalnya "pakai hook nomor 2", "jadiin 45 detik", atau 
 
 ### 3. Voice over
 
-> "Bikin VO dari naskah pocong-jalan-sepi.md"
+**Satu take (default, gratis, tanpa API key):**
+1. Buka [Google AI Studio](https://aistudio.google.com) → **Generate Speech**. Dari file naskah, tempel isi `## Style instructions` ke kolom Style instructions dan seluruh `## Script Voice Over` ke kolom teks. Pilih suara (yang disarankan `Enceladus`), Run, dengarkan, lalu download.
+2. Simpan file audionya ke folder voice, lalu bilang ke Claude: **"VO-nya udah, file-nya `pocong-jalan-sepi.wav`"**.
+3. Claude merapikan audionya (hening di awal/akhir dipotong, volume diseragamkan) dan membuat subtitle yang sinkron: whisper mendengarkan audionya, lalu tiap baris naskah ditempel ke jeda yang pas. Hasilnya `pocong-jalan-sepi.vo.wav` + `pocong-jalan-sepi.vo.srt`. File audio aslimu tidak diubah.
 
-**Mode manual (default, gratis, tanpa API key):**
-1. Claude memecah naskah jadi 3–5 potongan dan menampilkannya di chat. Tiap potongan punya **Style instructions** dan **Teks**, plus nama file untuk menyimpannya (`01.wav`, `02.wav`, ...).
-2. Buka [Google AI Studio](https://aistudio.google.com) → **Generate Speech**. Untuk tiap potongan: pilih suara (default yang disarankan `Enceladus`), tempel Style instructions dan Teks, generate, dengarkan, lalu download.
-3. Simpan file ke folder yang disebut Claude dengan nama sesuai nomornya. `01 take2.mp3` juga boleh, yang penting diawali nomor potongan. Kalau filenya tersimpan di Downloads dengan nama acak, cukup kasih tahu Claude path-nya secara berurutan.
-4. Bilang ke Claude: **"udah, gabungin"**. Claude memotong hening di awal/akhir tiap take, menyeragamkan volume, menyambung semuanya dengan jeda sesuai naskah, lalu menghasilkan `narasi.mp3` + `narasi.srt`.
+Subtitle presisi butuh model whisper `ggml-base.bin` (±148 MB). Claude minta izin dulu sebelum mengunduhnya. Tanpa model itu, subtitle tetap dibuat dari perkiraan jeda. Whisper kadang tidak menangkap kata yang sangat pendek dan dibisikkan, jadi satu-dua baris bisa meleset sedikit. File `.srt` bisa diedit tangan.
 
-Ada satu potongan yang kurang pas? Generate ulang potongan itu saja, timpa filenya, lalu minta digabung lagi.
+**Potongan:** kalau kamu mau mengulang bagian tertentu saja, minta "VO-nya per potongan". Claude memecah naskah jadi 3–5 potongan siap tempel (`01.wav`, `02.wav`, ...). Kamu generate tiap potongan, simpan sesuai nomornya, lalu bilang **"udah, gabungin"**. Subtitle mode ini selalu pas per baris.
 
-**Mode otomatis (Gemini API):** bilang "VO-nya pakai API aja". Claude me-render langsung tanpa copy-paste dan juga menghasilkan audio + `.srt`. Butuh `GEMINI_API_KEY` (lihat syarat di bawah). Kuota free tier bisa sekecil **10 request per hari** (cek angkamu di https://ai.dev/rate-limit), sedangkan satu naskah 60 detik bisa butuh 13–15 request. Kalau kuota habis, segmen yang sudah jadi tersimpan dan render bisa dilanjutkan besoknya, atau pakai mode manual.
+**Otomatis (Gemini API):** bilang "VO-nya pakai API aja". Claude me-render langsung tanpa copy-paste dan juga menghasilkan audio + `.srt`. Butuh `GEMINI_API_KEY` (lihat syarat di bawah). Kuota free tier bisa sekecil **10 request per hari** (cek angkamu di https://ai.dev/rate-limit), sedangkan satu naskah 60 detik bisa butuh 13–15 request. Kalau kuota habis, segmen yang sudah jadi tersimpan dan render bisa dilanjutkan besoknya, atau pakai mode satu take.
 
 ### 4. Video + subtitle
 
@@ -104,7 +103,7 @@ File MP4-nya sudah siap upload tanpa edit tambahan: 9:16, H.264 + AAC, dengan su
 ## Syarat untuk skill `voice`
 
 - Node.js 18+ (tanpa `npm install`)
-- **Mode manual (default, gratis):** cukup ffmpeg. Skill memecah naskah jadi potongan siap tempel ke Google AI Studio → Generate Speech; kamu generate dan download tiap potongan, lalu skill menggabungkannya jadi satu narasi (jeda pas, volume seragam, plus subtitle).
+- **Satu take dan potongan (gratis):** ffmpeg. Untuk subtitle presisi di mode satu take, ffmpeg yang punya filter `whisper` plus model `ggml-base.bin` di `~/whisper-models/` (Claude menawarkan mengunduhnya).
 - **Mode otomatis (API):** `GEMINI_API_KEY` dari https://aistudio.google.com/apikey (free tier cukup untuk 30 suara bawaan). Set sekali di terminal: `setx GEMINI_API_KEY "key-kamu"`, lalu buka ulang Claude Code. ffmpeg hanya untuk output `.mp3` dan kloning suara sendiri.
 
 ## Syarat untuk skill `anim`

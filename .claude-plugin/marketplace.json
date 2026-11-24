@@ -9,7 +9,7 @@
     {
       "name": "mysuf-horror",
       "source": "./plugins/mysuf-horror",
-      "description": "Naskah horor TikTok/Reels/Shorts siap TTS Google AI Studio, plus render animasi horor siluet 9:16 ke MP4."
+      "description": "Naskah horor TikTok/Reels/Shorts siap TTS Google AI Studio, plus render voice-over Gemini TTS dan animasi horor siluet 9:16 ke MP4."
     }
   ]
 }

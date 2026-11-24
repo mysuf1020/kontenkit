@@ -141,4 +141,4 @@ Seram lewat suasana, bukan sadis: tanpa gore/darah eksplisit, tanpa bunuh diri a
 
 ## Lanjut ke video
 
-Kalau user ingin naskah ini jadi animasi, tawarkan skill `anim` (mysuf-horror): kolom Teks layar → teks scene (maks ±14 kata, sudah bertanda `*bintang*`), kolom Visual → pilihan latar/karakter, dan audio hasil Script Voice Over dari Google AI Studio bisa dipasang dengan `--voice narasi.mp3` (atau .wav).
+Kalau user ingin naskah ini jadi animasi, tawarkan skill `anim` (mysuf-horror): kolom Teks layar → teks scene (maks ±14 kata, sudah bertanda `*bintang*`), kolom Visual → pilihan latar/karakter, dan audio hasil Script Voice Over bisa dipasang dengan `--voice narasi.mp3` (atau .wav). Audio itu bisa dibuat otomatis dari file naskah ini dengan skill `voice` (mysuf-horror), tanpa menyalin manual ke Google AI Studio.

@@ -5,6 +5,7 @@ Plugin Claude Code untuk bikin konten horor pendek berbahasa Indonesia (TikTok, 
 | Skill | Panggil | Fungsi |
 |---|---|---|
 | script | `/mysuf-horror:script` | Naskah horor 30–90 detik: hook, tabel per detik (VO, teks layar, visual, SFX), Script Voice Over bertag untuk Google AI Studio TTS + Style instructions, caption, hashtag. Hasil berupa file `.md`. |
+| voice | `/mysuf-horror:voice` | Ubah Script Voice Over bertag jadi file narasi `.wav`/`.mp3` dengan Gemini TTS: emosi per baris, jeda pas, suara napas. Bisa pakai suara sendiri (Gemini API paid tier). |
 | anim | `/mysuf-horror:anim` | Render cerita horor jadi video animasi siluet 9:16 (MP4) lengkap dengan efek suara. |
 
 Skill juga terpanggil otomatis kalau kamu minta, misalnya, "bikinin naskah tiktok horor 60 detik tentang pocong".
@@ -23,6 +24,12 @@ Update ke versi terbaru:
 ```
 /plugin marketplace update mysuf-horror
 ```
+
+## Syarat untuk skill `voice`
+
+- Node.js 18+ (tanpa `npm install`)
+- `GEMINI_API_KEY` dari https://aistudio.google.com/apikey (free tier cukup untuk 30 suara bawaan). Set sekali di terminal: `setx GEMINI_API_KEY "key-kamu"`, lalu buka ulang Claude Code.
+- ffmpeg, hanya untuk output `.mp3` dan kloning suara sendiri
 
 ## Syarat untuk skill `anim`
 

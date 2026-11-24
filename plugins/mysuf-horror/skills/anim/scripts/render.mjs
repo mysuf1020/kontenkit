@@ -231,5 +231,7 @@ async function main() {
   }
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+// realpath both sides: the skill is often installed as a symlink, and argv[1] keeps the
+// link path while import.meta.url points at the real file.
+const isMain = process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
 if (isMain) main().catch((e) => { console.error(e.message || e); process.exit(1); });

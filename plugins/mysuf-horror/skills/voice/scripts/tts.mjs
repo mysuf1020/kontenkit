@@ -6,7 +6,7 @@
 //                [--model gemini-3.8-flash-tts] [--style "..."] [--gap 0.2] [--dry-run] [--no-cache]
 //   node tts.mjs clone --source sampel.wav --consent persetujuan.wav [--name "Suara Saya"]
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, extname, basename } from 'node:path';
@@ -458,7 +458,9 @@ async function clone(opts) {
   console.log(`Pakai dengan: node tts.mjs naskah.md --voice ${ids[0]}`);
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+// realpath both sides: the skill is often installed as a symlink, and argv[1] keeps the
+// link path while import.meta.url points at the real file.
+const isMain = process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2));
   const run = opts._[0] === 'clone' ? clone : generate;

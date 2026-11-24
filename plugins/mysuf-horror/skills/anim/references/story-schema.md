@@ -24,7 +24,7 @@ Hanya data (tanpa fungsi). Koordinat memakai kanvas logis **1080 × 1920**. `x` 
 | `tone` | string | `blue` (malam), `green` (mistis/kuburan), `red` (bahaya), `purple` (gaib), `amber` (lampu jalan/senja). |
 | `moon` | bool | `false` untuk menyembunyikan bulan di latar luar ruangan. |
 | `seed` | angka | Ganti untuk variasi susunan pohon/nisan pada latar yang sama. |
-| `caption` | string | Teks narasi, muncul per kata. `*kata*` atau `*beberapa kata*` = warna aksen. |
+| `caption` | string | Teks narasi, muncul per kata. `*kata*` atau `*beberapa kata*` = warna aksen. Disembunyikan saat video memakai subtitle VO (`.srt`), kecuali render diberi `--keep-captions`. |
 | `captionPos` | `bottom` \| `center` \| `top` | Default `bottom`. Pakai `center` di latar `black`. |
 | `captionAt` | detik | Kapan kata pertama muncul. Default 0.25. |
 | `captionSpeed` | kata/detik | Default 3.2. |
@@ -71,7 +71,7 @@ Field umum:
 
 | Field | Keterangan |
 |---|---|
-| `type` | `person`, `ghost` (kuntilanak), `pocong`, `shadow` (sosok tinggi kurus), `eyes` (sepasang mata menyala), `bus` (bus tampak samping), `angkot` (angkot tampak samping), `money` (uang kertas lama) |
+| `type` | `person`, `ghost` (kuntilanak), `pocong`, `genderuwo`, `tuyul`, `ngesot` (suster ngesot), `banaspati` (bola api), `hand` (tangan pucat), `hair` (rambut menjuntai dari plafon), `shadow` (sosok tinggi kurus), `eyes` (sepasang mata menyala), `bus` (bus tampak samping), `angkot` (angkot tampak samping), `money` (uang kertas lama) |
 | `x` | posisi horizontal (0–1). |
 | `to` | posisi akhir; karakter bergerak dari `x` ke `to` selama jendela tampilnya. |
 | `y` | garis kaki (default 1350; `eyes` default 900). Lebih kecil = lebih jauh/tinggi. |
@@ -81,11 +81,25 @@ Field umum:
 | `appear` | `cut` (default), `fade`, `flicker` (berkedip-kedip saat muncul — paling seram untuk hantu). |
 | `alpha` | transparansi 0–1. |
 | `action` | lihat per tipe. `approach` berlaku untuk semua: mendekat ke kamera, membesar sampai `grow` (default 1.8). |
+| `still` | `true` = hantu diam total (tanpa melayang naik-turun/lompat), hanya kain/rambut bergerak tipis. Lebih seram dari hantu yang banyak bergerak. |
+| `blur` | px. Mengaburkan karakter — hantu jauh di kabut, di balik kaca buram. |
+| `silhouette` | `true` atau warna (mis. `'#04050a'`) = karakter digambar sebagai bayangan rata. Pakai dengan `clip` + `blur` untuk sosok di balik jendela/tirai. |
+| `clip` | `[x, y, w, h]` (px logis) = karakter hanya terlihat di dalam kotak itu, mis. kaca jendela `room` `[600, 450, 300, 400]`. |
+| `cast` | Bayangan karakter dilempar lampu ke dinding: `{sx, sy, skew, dx, dy, alpha, blur, only, light}`. `sx/sy` skala (default 1.6), `skew` miring (−0.35 = condong ke kanan), `dx/dy` geser, `only: true` = cuma bayangannya yang tampak (hantunya tidak), `light: false` mematikan genangan cahaya lampu di dinding. Pasangkan dengan `person` ber-`accessory: 'lantern'`. |
+| `reveal` | `'lightning'` = hanya terlihat saat kilat (pakai `lightning` di scene), `'flicker'` = timbul-tenggelam acak seperti terlihat di lampu kedip. |
+
+**Prinsip penampilan hantu (pakai ini, jangan pamer hantu utuh di tiap scene):** tampilkan sebagian/samar dulu — jauh di kabut (`size` kecil + `blur`), siluet di balik jendela (`silhouette` + `clip`), bayangan di dinding (`cast.only`), tangan dari kolong (`hand`), rambut dari plafon (`hair`), atau hanya saat kilat (`reveal`). Tiap scene berikutnya hantu makin dekat (pindah posisi lewat potongan scene, bukan berjalan). Hantu utuh dan dekat baru di klimaks, lalu jumpscare.
 
 Per tipe:
 - **person** — `action`: `idle`, `walk`, `run` (pakai `to`), `tremble` (gemetar), `look` (kepala menoleh). `accessory`: `scarf`, `bag`, `cap`, `lantern` (cahaya hangat), `flashlight` (sorot senter ke arah hadap; `flicker: true` = senter kedip). `hair: 'long'`. `color` = warna aksesoris (default aksen). `role: 'conductor'` = kondektur bus (seragam biru, topi pet, handuk di bahu, tas uang selempang, kipas uang kertas di tangan) — jangan dipadukan dengan `accessory`.
-- **ghost** — kuntilanak melayang tanpa kaki: gaun putih compang-camping tembus pandang, rambut basah menjuntai menutupi wajah pucat, kepala miring, tangan panjang berkuku. `eyes: false` menyembunyikan mata merah, `reach: true` = kedua tangan terulur ke depan (cocok saat klimaks/`approach`).
-- **pocong** — `action: 'hop'` melompat di tempat; dengan `to` melompat berpindah.
+- **ghost** — kuntilanak melayang tanpa kaki: gaun putih compang-camping tembus pandang, rambut basah menjuntai menutupi wajah pucat, kepala miring, tangan panjang berkuku. `eyes: false` menyembunyikan mata merah, `reach: true` = kedua tangan terulur ke depan (cocok saat klimaks/`approach`). `pose: 'back'` = berdiri membelakangi, rambut menutupi seluruh punggung (seram di ujung lorong). `pose: 'perch'` = duduk di dahan pohon dengan kaki telanjang berayun; `x/y` = titik duduk (mis. `y: 860` di `forest`), `branch: false` kalau tidak mau dahan tambahan.
+- **pocong** — kain kafan menguning dan bernoda tanah di bawah, kerutan tidak beraturan, terikat di kepala/leher/kaki. `faceStyle`: `'dark'` (lubang gelap + mata pucat, default), `'rotten'` (wajah membusuk), `'covered'` (tertutup kain). `lean` = kemiringan. `action: 'hop'` melompat di tempat; dengan `to` melompat berpindah.
+- **genderuwo** — siluet raksasa berbulu lebat (±900 px pada `size` 1), bungkuk, lengan panjang sampai lutut, mata merah menyala berkedip, napas mengepul. Pakai `size` 0.8–1 dekat, atau `cast.only` untuk bayangan raksasanya saja.
+- **tuyul** — anak gundul kurus kelabu, kepala besar, telinga runcing, rongga mata hitam dengan titik merah. `size` 1.3–1.6. Dengan `to` = berlari.
+- **ngesot** — suster ngesot merangkak di lantai menghadap kanan (topi perawat, rambut terurai ke lantai, satu mata mengintip). `y` = lantai (±1400 di `corridor`), `size` ±1.1. Dengan `to` = menyeret badan maju.
+- **banaspati** — bola api melayang yang menerangi sekitarnya, lidah api + percikan. Digambar di tengah `(x, y)` (default `y` 900). `face: true` memunculkan wajah samar di apinya.
+- **hand** — lengan pucat keluar dari gelap. `x/y` = titik keluarnya (mis. kolong ranjang `room`: `x: 700, y: 1352`), `dir` derajat (0 kanan, 90 bawah, 180 kiri, −90 atas), `len` (default 420), memanjang selama `reachTime` (default 1.6 dtk).
+- **hair** — rambut hitam menjuntai dari plafon dengan wajah terbalik di ujungnya. `x` = posisi, `y` = titik gantung (default 0 = atas layar), `len` (default 760), `descend: true` = turun pelan selama `descendTime`, `face: false` = rambut saja.
 - **shadow** — sosok bayangan tinggi; `eyes: false`, `color` warna mata.
 - **bus** — bus malam tampak samping, menghadap kanan, roda di `y` (pakai ±1420 di latar `road`). Dengan `to` = melaju (roda berputar). `passenger` (0–7) = siluet penumpang di jendela ke-n. `dark: true` = lampu kabin & lampu depan mati.
 - **angkot** — angkot tampak samping menghadap kanan (biru, strip kuning, pintu geser terbuka), roda di `y` (±1420 di `road`). `to` = melaju, `color` = warna cat, `label` = kode trayek (default `T19`), `passenger` = siluet penumpang di jendela, `dark: true` = lampu mati.

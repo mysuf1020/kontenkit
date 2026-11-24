@@ -854,12 +854,15 @@
 
   // Kuntilanak: floating, no feet, tattered see-through gown, wet hair hanging over a
   // gaunt tilted face, long pale arms with claw fingers. Origin = where feet would be.
-  function ghost(c, ch, k) {
+  function ghost(c, ch, k, T) {
+    if (ch.pose === 'back') return kuntiBack(c, ch, k, T);
+    if (ch.pose === 'perch') return kuntiPerch(c, ch, k, T);
     const { lt, R } = k;
     const hr = rng(31);
     const flick = 0.82 + 0.18 * (R ? R() : 1);
-    c.translate(0, -70 + Math.sin(lt * 1.6) * 16);
-    if (R && R() < 0.06) c.translate((R() - 0.5) * 24, 0);       // occasional ghostly skip
+    // `still`: no bobbing or skipping — a ghost that just stands there is scarier
+    c.translate(0, ch.still ? -70 : -70 + Math.sin(lt * 1.6) * 16);
+    if (!ch.still && R && R() < 0.06) c.translate((R() - 0.5) * 24, 0);       // occasional ghostly skip
     // cold aura
     c.globalCompositeOperation = 'screen';
     glowRadial(c, 0, -300, 30, 470, '190,215,200', 0.30 * flick);
@@ -941,24 +944,84 @@
     c.restore();
   }
 
-  function pocong(c, ch, k) {
+  // Pocong: a body bound in a burial shroud — tied at the head, neck and ankles, the cloth
+  // wrinkled, yellowed and soiled at the bottom. `faceStyle`: 'dark' (hollow + pale eyes,
+  // default), 'rotten', or 'covered'. `lean` tilts it; it only hops with `action:'hop'` or `to`.
+  function pocong(c, ch, k, T) {
     const { lt } = k;
-    if ((ch.action || '') === 'hop' || ch.to != null) c.translate(0, -Math.abs(Math.sin(lt * 3.6)) * 46);
+    if (!ch.still && (ch.action === 'hop' || ch.to != null)) c.translate(0, -Math.abs(Math.sin(lt * 3.6)) * 46);
+    c.rotate((ch.lean == null ? 0.03 : ch.lean) + Math.sin(lt * 1.1) * (ch.still ? 0.004 : 0.01));
     c.globalCompositeOperation = 'screen';
-    glowRadial(c, 0, -250, 30, 360, '210,215,195', 0.16);
+    glowRadial(c, 0, -300, 30, 400, '205,208,190', 0.18);
     c.globalCompositeOperation = 'source-over';
-    const g = c.createLinearGradient(-70, 0, 70, 0);
-    g.addColorStop(0, '#9a9a8c'); g.addColorStop(0.45, '#e2e0d2'); g.addColorStop(1, '#8c8c80');
-    c.fillStyle = g;
-    c.beginPath(); c.moveTo(-40, 0); c.quadraticCurveTo(-82, -250, -58, -430);
-    c.quadraticCurveTo(0, -520, 58, -430); c.quadraticCurveTo(82, -250, 40, 0); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(-14, -490); c.lineTo(-34, -548); c.lineTo(0, -505); c.lineTo(34, -548); c.lineTo(14, -490); c.fill();
-    c.strokeStyle = '#6d6b60'; c.lineWidth = 5;
-    [-488, -390, -40].forEach((y) => { c.beginPath(); c.moveTo(-60, y); c.quadraticCurveTo(0, y + 10, 60, y); c.stroke(); });
-    c.fillStyle = '#26231d'; c.beginPath(); c.ellipse(0, -440, 34, 42, 0, 0, 7); c.fill();
-    c.fillStyle = '#4a473a'; c.beginPath(); c.ellipse(0, -436, 26, 34, 0, 0, 7); c.fill();
-    c.fillStyle = '#f4f1e4';
-    c.beginPath(); c.arc(-10, -444, 4.5, 0, 7); c.arc(10, -444, 4.5, 0, 7); c.fill();
+    const body = new Path2D();
+    body.moveTo(-22, 0);
+    body.quadraticCurveTo(-36, -30, -32, -70); body.quadraticCurveTo(-28, -94, -40, -122);
+    body.bezierCurveTo(-72, -262, -80, -362, -64, -432); body.quadraticCurveTo(-58, -470, -44, -482);
+    body.bezierCurveTo(-60, -522, -48, -578, 0, -588); body.bezierCurveTo(48, -578, 60, -522, 44, -482);
+    body.quadraticCurveTo(58, -470, 64, -432); body.bezierCurveTo(80, -362, 72, -262, 40, -122);
+    body.quadraticCurveTo(28, -94, 32, -70); body.quadraticCurveTo(36, -30, 22, 0); body.closePath();
+    const g = c.createLinearGradient(-80, 0, 80, 0);
+    g.addColorStop(0, '#76756a'); g.addColorStop(0.38, '#d5d2c2'); g.addColorStop(0.55, '#ebe8dc'); g.addColorStop(1, '#838175');
+    c.fillStyle = g; c.fill(body);
+    const hr = rng(19);
+    c.save(); c.clip(body);
+    const soil = c.createLinearGradient(0, 0, 0, -230);
+    soil.addColorStop(0, 'rgba(62,48,30,0.65)'); soil.addColorStop(1, 'rgba(62,48,30,0)');
+    c.fillStyle = soil; c.fillRect(-90, -230, 180, 230);
+    c.fillStyle = 'rgba(150,130,70,0.10)'; c.fillRect(-90, -600, 180, 600);           // yellowed cloth
+    for (let i = 0; i < 9; i++) { c.fillStyle = 'rgba(70,55,35,' + (0.08 + hr() * 0.14) + ')'; c.beginPath(); c.ellipse(-60 + hr() * 120, -40 - hr() * 380, 8 + hr() * 20, 12 + hr() * 30, hr(), 0, 7); c.fill(); }
+    // irregular creases where the shroud was pulled and tied — partial, uneven, never a pattern
+    for (let i = 0; i < 9; i++) {
+      const y = -150 - hr() * 300, x0 = -85 + hr() * 60, x1 = x0 + 50 + hr() * 90, sag = 6 + hr() * 22, tilt = (hr() - 0.5) * 60;
+      c.strokeStyle = 'rgba(60,58,50,' + (0.25 + hr() * 0.3) + ')'; c.lineWidth = 2 + hr() * 3;
+      c.beginPath(); c.moveTo(x0, y); c.quadraticCurveTo((x0 + x1) / 2, y + sag, x1, y + tilt); c.stroke();
+      c.strokeStyle = 'rgba(255,255,245,0.18)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(x0, y - 4); c.quadraticCurveTo((x0 + x1) / 2, y + sag - 4, x1, y + tilt - 4); c.stroke();
+    }
+    // tension folds radiating from the neck and ankle ties
+    c.strokeStyle = 'rgba(60,58,50,0.35)'; c.lineWidth = 2.5;
+    for (let i = 0; i < 6; i++) {
+      const a = -0.9 + i * 0.36;
+      c.beginPath(); c.moveTo(Math.sin(a) * 30, -470); c.quadraticCurveTo(Math.sin(a) * 60, -440, Math.sin(a) * 75, -380 - hr() * 30); c.stroke();
+      c.beginPath(); c.moveTo(Math.sin(a) * 26, -118); c.quadraticCurveTo(Math.sin(a) * 48, -150, Math.sin(a) * 62, -200 - hr() * 30); c.stroke();
+    }
+    c.strokeStyle = 'rgba(60,58,50,0.35)'; c.lineWidth = 3;
+    [-30, 8, 34].forEach((x) => { c.beginPath(); c.moveTo(x * 0.6, -470); c.quadraticCurveTo(x * 1.3, -300, x, -130); c.stroke(); });
+    c.globalCompositeOperation = 'screen';
+    const rim = c.createLinearGradient(40, 0, 85, 0);
+    rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, T ? T.rim : 'rgba(150,175,230,0.6)');
+    c.fillStyle = rim; c.fillRect(-90, -600, 180, 600);
+    c.restore();
+    // ties at the ankles, neck and over the head, with frayed tails at the top knot
+    c.strokeStyle = '#5e5a4c'; c.lineWidth = 8;
+    [[-104, 46], [-478, 50]].forEach(([y, w]) => { c.beginPath(); c.moveTo(-w, y); c.quadraticCurveTo(0, y + 10, w, y); c.stroke(); });
+    // the shroud gathered and tied above the head: a short, ragged tuft of cloth
+    const tw = Math.sin(lt * 1.7) * 3;
+    c.fillStyle = '#c9c6b5';
+    c.beginPath(); c.moveTo(-12, -586);
+    c.quadraticCurveTo(-26, -606, -24 + tw, -626); c.lineTo(-14 + tw, -616); c.lineTo(-8 + tw, -634);
+    c.lineTo(0 + tw, -620); c.lineTo(9 + tw, -636); c.lineTo(14 + tw, -618); c.lineTo(24 + tw, -628);
+    c.quadraticCurveTo(26, -604, 12, -586); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(60,58,50,0.4)'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(-6, -592); c.lineTo(-10 + tw, -620); c.moveTo(6, -592); c.lineTo(8 + tw, -624); c.stroke();
+    c.fillStyle = '#5e5a4c'; c.beginPath(); c.ellipse(0, -588, 14, 7, 0, 0, 7); c.fill();
+    // face opening
+    const fs = ch.faceStyle || 'dark';
+    if (fs !== 'covered') {
+      c.fillStyle = '#120f0b'; c.beginPath(); c.ellipse(0, -526, 29, 37, 0, 0, 7); c.fill();
+      if (fs === 'rotten') {
+        const fg = c.createRadialGradient(0, -530, 4, 0, -526, 30);
+        fg.addColorStop(0, '#5d5a45'); fg.addColorStop(1, '#22201a');
+        c.fillStyle = fg; c.beginPath(); c.ellipse(0, -526, 23, 31, 0, 0, 7); c.fill();
+        c.fillStyle = '#0a0806'; c.beginPath(); c.ellipse(0, -506, 8, 6, 0, 0, 7); c.fill();
+      }
+      c.fillStyle = '#ece8d6'; c.shadowColor = '#ffffff'; c.shadowBlur = 10;
+      c.beginPath(); c.arc(-9, -532, fs === 'rotten' ? 5 : 3.5, 0, 7); c.arc(10, -531, fs === 'rotten' ? 5 : 3.5, 0, 7); c.fill();
+      c.shadowBlur = 0;
+    } else {
+      c.fillStyle = 'rgba(40,38,30,0.25)'; c.beginPath(); c.ellipse(0, -526, 26, 34, 0, 0, 7); c.fill();
+    }
   }
 
   function shadowFig(c, ch, k, T) {
@@ -1093,7 +1156,316 @@
     });
   }
 
-  const CHARS = { person, ghost, pocong, shadow: shadowFig, eyes, bus: busSide, angkot: angkotSide, money };
+  // ---------- ghost lab: Indonesian ghosts and partial apparitions ----------
+  // Short outward strokes along a clockwise (on-screen) outline: shaggy fur, frayed cloth.
+  function furEdge(c, pts, r, len, col, w) {
+    c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round';
+    c.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length];
+      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
+      // hair hangs: bend each strand from the outline normal toward straight down
+      let nx = dy / L, ny = -dx / L;
+      nx *= 0.55; ny = ny * 0.55 + 0.85;
+      const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+      for (let j = 0, n = Math.ceil(L / 5); j < n; j++) {
+        const px = x0 + dx * j / n, py = y0 + dy * j / n, l = len * (0.3 + r() * 1.1), a = (r() - 0.5) * 0.6;
+        const ex = px + (nx * Math.cos(a) - ny * Math.sin(a)) * l, ey = py + (ny * Math.cos(a) + nx * Math.sin(a)) * l;
+        c.moveTo(px, py);
+        c.quadraticCurveTo(px + (ex - px) * 0.5 + (r() - 0.5) * 6, py + (ey - py) * 0.4, ex, ey);
+      }
+    }
+    c.stroke();
+  }
+  const polyPath = (pts) => { const p = new Path2D(); pts.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y))); p.closePath(); return p; };
+  const cloth = (c, top, bottom) => {
+    const g = c.createLinearGradient(0, top, 0, bottom);
+    g.addColorStop(0, 'rgba(228,232,220,0.95)'); g.addColorStop(0.6, 'rgba(205,212,200,0.75)'); g.addColorStop(1, 'rgba(190,200,188,0.05)');
+    return g;
+  };
+
+  // Kuntilanak seen from behind: a curtain of wet hair down past the hips, arms hanging.
+  function kuntiBack(c, ch, k) {
+    const { lt } = k;
+    const hr = rng(44);
+    c.translate(0, ch.still === false ? -70 + Math.sin(lt * 1.6) * 14 : -70);
+    c.globalCompositeOperation = 'screen'; glowRadial(c, 0, -300, 30, 460, '190,215,200', 0.26); c.globalCompositeOperation = 'source-over';
+    c.fillStyle = cloth(c, -420, 40);
+    c.beginPath(); c.moveTo(-50, -410); c.bezierCurveTo(-74, -330, -100, -180, -120, -30);
+    for (let i = 0; i <= 12; i++) c.lineTo(-120 + i * 20 + Math.sin(lt * 2 + i) * 5, (i % 2 ? -12 : 26 + hr() * 60) + Math.sin(lt * 2.7 + i) * 8);
+    c.bezierCurveTo(100, -180, 74, -330, 50, -410); c.closePath(); c.fill();
+    c.strokeStyle = '#cfd6c9'; c.lineCap = 'round';
+    [-1, 1].forEach((s) => {
+      const h = limb(c, s * 52, -392, s * 0.07, 280, 12);
+      c.lineWidth = 4;
+      for (let f = -2; f <= 2; f++) { c.beginPath(); c.moveTo(h[0], h[1]); c.lineTo(h[0] + f * 7, h[1] + 46); c.stroke(); }
+    });
+    c.fillStyle = '#030303';
+    c.beginPath(); c.moveTo(-46, -470); c.quadraticCurveTo(0, -540, 46, -470);
+    c.quadraticCurveTo(80, -300, 70 + Math.sin(lt) * 6, -120); c.lineTo(-70 + Math.sin(lt + 1) * 6, -120); c.quadraticCurveTo(-80, -300, -46, -470); c.fill();
+    c.strokeStyle = '#030303';
+    for (let i = 0; i < 46; i++) {
+      const x0 = (hr() - 0.5) * 120, end = -150 + hr() * 160, sw = Math.sin(lt * 1.3 + i) * 8;
+      c.lineWidth = 3 + hr() * 7;
+      c.beginPath(); c.moveTo(x0 * 0.5, -490); c.bezierCurveTo(x0, -380, x0 * 1.2 + sw * 0.4, -250, x0 * 1.15 + sw, end); c.stroke();
+    }
+  }
+
+  // Kuntilanak sitting on a tree branch (origin = where she sits), bare feet dangling.
+  // `branch: false` when the scene already has a branch there.
+  function kuntiPerch(c, ch, k) {
+    const { lt } = k;
+    const hr = rng(52);
+    if (ch.branch !== false) {
+      c.strokeStyle = '#020203'; c.lineCap = 'round'; c.lineWidth = 34;
+      c.beginPath(); c.moveTo(-460, 40); c.quadraticCurveTo(-100, -6, 400, 46); c.stroke();
+      c.lineWidth = 10; c.beginPath(); c.moveTo(220, 28); c.lineTo(330, -60); c.moveTo(-280, 22); c.lineTo(-350, -50); c.stroke();
+    }
+    c.globalCompositeOperation = 'screen'; glowRadial(c, 0, -120, 30, 420, '190,215,200', 0.26); c.globalCompositeOperation = 'source-over';
+    // dress draped over the branch
+    c.fillStyle = cloth(c, -80, 280);
+    c.beginPath(); c.moveTo(-50, -70); c.bezierCurveTo(-92, 0, -104, 120, -104, 230);
+    for (let i = 0; i <= 10; i++) c.lineTo(-104 + i * 20.8 + Math.sin(lt * 2 + i) * 4, 230 + (i % 2 ? -14 : 18 + hr() * 30) + Math.sin(lt * 2.4 + i) * 6);
+    c.bezierCurveTo(104, 120, 92, 0, 50, -70); c.closePath(); c.fill();
+    const sw = Math.sin(lt * 1.4) * 12;
+    c.strokeStyle = '#c9d1c3'; c.lineCap = 'round'; c.lineWidth = 13;
+    [[-26, sw], [24, sw * 0.7]].forEach(([fx, s]) => {
+      c.beginPath(); c.moveTo(fx, 220); c.lineTo(fx + s, 300); c.stroke();
+      c.fillStyle = '#c9d1c3'; c.beginPath(); c.ellipse(fx + s + 6, 306, 14, 7, 0.2, 0, 7); c.fill();
+    });
+    c.fillStyle = 'rgba(226,230,218,0.95)';
+    c.beginPath(); c.moveTo(-48, -60); c.lineTo(-40, -300); c.quadraticCurveTo(0, -318, 40, -300); c.lineTo(48, -60); c.closePath(); c.fill();
+    c.strokeStyle = '#cfd6c9';
+    limb(c, -42, -285, 0.18 + Math.sin(lt * 0.9) * 0.03, 250, 12);
+    const h = limb(c, 42, -285, -0.55, 190, 12);
+    c.lineWidth = 4; for (let f = -2; f <= 2; f++) { c.beginPath(); c.moveTo(h[0], h[1]); c.lineTo(h[0] + 10 + f * 3, h[1] + 30); c.stroke(); }
+    c.save(); c.translate(0, -350); c.rotate(0.22 + Math.sin(lt * 0.6) * 0.03);
+    c.fillStyle = '#cdd4c7'; c.beginPath(); c.ellipse(0, 0, 38, 48, 0, 0, 7); c.fill();
+    c.fillStyle = '#030303'; c.beginPath(); c.ellipse(0, -12, 54, 60, 0, Math.PI, 0); c.fill();
+    c.strokeStyle = '#030303';
+    for (let i = 0; i < 38; i++) {
+      const x0 = (hr() - 0.5) * 90, end = 120 + hr() * 300, s2 = Math.sin(lt * 1.1 + i) * 8;
+      c.lineWidth = 3 + hr() * 6;
+      c.beginPath(); c.moveTo(x0 * 0.4, -50); c.bezierCurveTo(x0, 20, x0 * 1.1 + s2 * 0.3, end * 0.6, x0 * 1.2 + s2, end); c.stroke();
+    }
+    if (ch.eyes !== false) { c.fillStyle = '#ff2a2a'; c.shadowColor = '#ff0000'; c.shadowBlur = 14; c.beginPath(); c.arc(12, 2, 3.5, 0, 7); c.fill(); c.shadowBlur = 0; }
+    c.restore();
+  }
+
+  // Genderuwo: a huge, hunched, hairy silhouette with glowing red eyes and steaming breath.
+  // Clockwise outline: small head sunk between huge shoulders, long arms hanging clear of
+  // the body (hands at knee height), short thick legs.
+  const GENDERUWO = [
+    [-34, -770], [0, -802], [40, -786], [52, -740], [44, -712], [70, -705], [140, -690],
+    [195, -640], [215, -560], [228, -460], [250, -350], [268, -250], [276, -190], [290, -160],
+    [272, -126], [250, -140], [236, -170], [222, -260], [200, -380], [178, -470], [165, -380],
+    [150, -260], [150, -170], [140, -90], [128, 0], [52, 0], [44, -120], [0, -150], [-44, -120],
+    [-52, 0], [-128, 0], [-140, -90], [-150, -170], [-150, -260], [-165, -380], [-178, -470],
+    [-200, -380], [-222, -260], [-236, -170], [-250, -140], [-272, -126], [-290, -160],
+    [-276, -190], [-268, -250], [-250, -350], [-228, -460], [-215, -560], [-195, -640],
+    [-140, -690], [-70, -705], [-44, -712], [-52, -740],
+  ];
+  const GENDERUWO_PATH = polyPath(GENDERUWO);
+  function genderuwo(c, ch, k, T) {
+    const { lt } = k;
+    c.scale(1, 1 + Math.sin(lt * 1.8) * 0.008);                    // heavy breathing
+    c.shadowColor = T ? T.rim : 'rgba(150,175,230,0.6)'; c.shadowBlur = 34;
+    c.fillStyle = '#020202'; c.fill(GENDERUWO_PATH);
+    c.shadowBlur = 0;
+    furEdge(c, GENDERUWO, rng(23), 30, '#020202', 3.5);
+    furEdge(c, GENDERUWO, rng(24), 18, '#020202', 2);
+    c.globalCompositeOperation = 'screen';
+    furEdge(c, GENDERUWO.slice(4, 14), rng(29), 22, 'rgba(120,140,180,0.16)', 1.6);
+    c.globalCompositeOperation = 'source-over';
+    const open = ((lt + 1.3) % 4.2) < 0.16 ? 0.1 : 1;
+    c.fillStyle = '#ff2416'; c.shadowColor = '#ff1000'; c.shadowBlur = 26;
+    c.beginPath(); c.ellipse(-12, -752, 9, 6 * open, -0.2, 0, 7); c.ellipse(20, -750, 9, 6 * open, 0.2, 0, 7); c.fill();
+    c.shadowBlur = 0;
+    const bp = (lt % 2.6) / 2.6;
+    if (bp < 0.6) {
+      c.globalCompositeOperation = 'screen';
+      glowRadial(c, 30 + bp * 120, -722 - bp * 60, 4, 40 + bp * 90, '220,225,235', 0.22 * (1 - bp / 0.6));
+      c.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  // Tuyul: a small bald child spirit — big head and ears, pot belly, hollow red eyes.
+  function tuyul(c, ch, k, T) {
+    const { lt } = k;
+    const run = ch.to != null && !ch.still;
+    const ph = lt * 14, sw = run ? Math.sin(ph) * 0.6 : 0;
+    if (run) c.translate(0, -Math.abs(Math.sin(ph)) * 10);
+    // grey, underfed, hunched forward; head tilted, sockets dark and empty but for a red pinpoint
+    const skin = '#6f7a6f';
+    c.rotate(run ? 0.12 : 0.06);
+    c.shadowColor = T ? T.rim : 'rgba(150,175,230,0.6)'; c.shadowBlur = 22;
+    c.strokeStyle = skin; c.lineCap = 'round';
+    limb(c, -14, -95, sw - 0.1, 95, 13); limb(c, 14, -95, -sw + 0.1, 95, 13);
+    const hl = limb(c, -30, -160, -sw * 0.8 - 0.1, 92, 9), hrr = limb(c, 30, -160, sw * 0.8 + 0.1, 92, 9);
+    c.lineWidth = 3;
+    [hl, hrr].forEach((h) => { for (let f = -1; f <= 1; f++) { c.beginPath(); c.moveTo(h[0], h[1]); c.lineTo(h[0] + f * 6, h[1] + 22); c.stroke(); } });
+    const bg = c.createRadialGradient(-10, -130, 6, 0, -120, 55);
+    bg.addColorStop(0, '#8a9488'); bg.addColorStop(1, '#3f483f');
+    c.fillStyle = bg; c.beginPath(); c.ellipse(0, -122, 38, 48, 0, 0, 7); c.fill();
+    c.shadowBlur = 0;
+    c.strokeStyle = 'rgba(30,36,30,0.55)'; c.lineWidth = 2.5;
+    for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(-28, -150 + i * 10); c.quadraticCurveTo(0, -142 + i * 10, 28, -150 + i * 10); c.stroke(); }
+    c.save(); c.translate(6, -212); c.rotate(-0.28 + Math.sin(lt * 0.8) * 0.06);
+    c.fillStyle = skin;
+    c.beginPath(); c.moveTo(-58, -8); c.lineTo(-86, -34); c.lineTo(-60, 14); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(58, -8); c.lineTo(86, -34); c.lineTo(60, 14); c.closePath(); c.fill();
+    const hg = c.createRadialGradient(-18, -26, 8, 0, 0, 68);
+    hg.addColorStop(0, '#99a396'); hg.addColorStop(1, '#3a423a');
+    c.fillStyle = hg; c.beginPath(); c.ellipse(0, 0, 60, 66, 0, 0, 7); c.fill();
+    c.strokeStyle = 'rgba(40,30,50,0.35)'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(-30, -50); c.quadraticCurveTo(-18, -30, -26, -12); c.moveTo(24, -54); c.quadraticCurveTo(34, -34, 22, -20); c.stroke();
+    const sg = (ex) => { const g = c.createRadialGradient(ex, 6, 2, ex, 6, 24); g.addColorStop(0, '#000'); g.addColorStop(0.7, 'rgba(0,0,0,0.9)'); g.addColorStop(1, 'rgba(0,0,0,0)'); return g; };
+    [-22, 22].forEach((ex) => { c.fillStyle = sg(ex); c.beginPath(); c.ellipse(ex, 6, 22, 24, 0, 0, 7); c.fill(); });
+    c.fillStyle = '#ff2a1a'; c.shadowColor = '#ff1a00'; c.shadowBlur = 10;
+    c.beginPath(); c.arc(-21, 8, 2.4, 0, 7); c.arc(23, 7, 2.4, 0, 7); c.fill(); c.shadowBlur = 0;
+    c.fillStyle = '#0b0908'; c.beginPath(); c.ellipse(2, 40, 7, 10, 0, 0, 7); c.fill();
+    c.restore();
+  }
+
+  // Suster ngesot: a nurse dragging herself along the floor toward the camera (+x),
+  // face hidden by hair, one eye showing. Moves with `to`.
+  function ngesot(c, ch, k, T) {
+    const { lt } = k;
+    const moving = ch.to != null && !ch.still;
+    const ph = moving ? lt * 2.4 : lt * 0.5, reach = (Math.sin(ph) + 1) / 2;
+    c.fillStyle = 'rgba(0,0,0,0.55)'; c.beginPath(); c.ellipse(0, 0, 360, 22, 0, 0, 7); c.fill();
+    c.strokeStyle = '#6f776d'; c.lineCap = 'round';
+    c.lineWidth = 22; c.beginPath(); c.moveTo(-130, -26); c.quadraticCurveTo(-240, -14, -330, -10); c.stroke();
+    c.lineWidth = 20; c.beginPath(); c.moveTo(-130, -40); c.quadraticCurveTo(-250, -36, -320, -30); c.stroke();
+    c.shadowColor = T ? T.rim : 'rgba(150,175,230,0.6)'; c.shadowBlur = 20;
+    const dg = c.createLinearGradient(0, -150, 0, 0);
+    dg.addColorStop(0, '#b9b8ad'); dg.addColorStop(1, '#5d5c55');
+    c.fillStyle = dg;
+    c.fill(polyPath([[-230, -12], [-215, -58], [-120, -84], [20, -112], [130, -142], [165, -104], [140, -62], [20, -34], [-120, -10]]));
+    c.shadowBlur = 0;
+    const hr = rng(61);
+    for (let i = 0; i < 6; i++) { c.fillStyle = 'rgba(70,60,45,' + (0.12 + hr() * 0.15) + ')'; c.beginPath(); c.ellipse(-180 + hr() * 300, -40 - hr() * 60, 10 + hr() * 20, 6 + hr() * 10, 0, 0, 7); c.fill(); }
+    c.strokeStyle = '#c2c9bd'; c.lineWidth = 17;
+    c.beginPath(); c.moveTo(140, -118); c.quadraticCurveTo(220 + reach * 40, -110, 290 + reach * 70, -6); c.stroke();
+    c.beginPath(); c.moveTo(110, -104); c.quadraticCurveTo(170, -30, 230 - reach * 40, -6); c.stroke();
+    c.lineWidth = 5;
+    [[290 + reach * 70, -6], [230 - reach * 40, -6]].forEach(([hx, hy]) => { for (let f = 0; f < 4; f++) { c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx + 26 + f * 2, hy - 2 + f * 3); c.stroke(); } });
+    c.save(); c.translate(205, -160); c.rotate(0.35);
+    c.fillStyle = '#c5ccc0'; c.beginPath(); c.ellipse(0, 0, 46, 54, 0, 0, 7); c.fill();
+    c.fillStyle = '#e8e6dc'; c.beginPath(); c.moveTo(-34, -30); c.lineTo(30, -40); c.lineTo(22, -62); c.lineTo(-28, -54); c.closePath(); c.fill();
+    c.strokeStyle = ACC; c.lineWidth = 4; c.beginPath(); c.moveTo(-4, -56); c.lineTo(-2, -42); c.moveTo(-10, -49); c.lineTo(5, -50); c.stroke();
+    // hair falls forward off the bowed head and spreads on the floor in front of her
+    c.strokeStyle = '#030303';
+    for (let i = 0; i < 34; i++) {
+      const a = -0.9 + hr() * 1.3, sw = Math.sin(lt * 1.2 + i) * 4, len = 70 + hr() * 70;
+      const x0 = Math.cos(a - 1.2) * 40, y0 = Math.sin(a - 1.2) * 40;
+      c.lineWidth = 2.5 + hr() * 5;
+      c.beginPath(); c.moveTo(x0, y0);
+      c.quadraticCurveTo(x0 + Math.cos(a) * len * 0.6 + sw, y0 + Math.sin(a) * len * 0.6 + 30, x0 + Math.cos(a) * len + 30 + sw, 120 + hr() * 30);
+      c.stroke();
+    }
+    c.fillStyle = '#e9e6d8'; c.beginPath(); c.arc(20, 6, 6, 0, 7); c.fill();
+    c.fillStyle = '#ff2a1a'; c.beginPath(); c.arc(21, 7, 2.6, 0, 7); c.fill();
+    c.restore();
+  }
+
+  // Banaspati: a floating ball of fire with a skull-like hollow face; lights its surroundings.
+  function banaspati(c, ch, k) {
+    const { lt } = k;
+    c.translate(0, Math.sin(lt * 2.1) * 12);
+    c.globalCompositeOperation = 'screen';
+    glowRadial(c, 0, 0, 20, 560, '255,110,25', 0.38);
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 16; i++) {
+      const r = rng(i * 13 + 5), ph = lt * (3 + r() * 2.5) + i * 1.3;
+      const a = -Math.PI / 2 + (r() - 0.5) * 1.5 + Math.sin(ph) * 0.18;
+      const len = 150 + r() * 170 + Math.sin(ph * 1.7) * 45, w = 38 + r() * 42;
+      const px = -Math.sin(a), py = Math.cos(a), tx = Math.cos(a) * len, ty = Math.sin(a) * len;
+      const g = c.createRadialGradient(0, 0, 10, 0, 0, len);
+      g.addColorStop(0, 'rgba(255,235,160,0.55)'); g.addColorStop(0.45, 'rgba(255,140,35,0.4)'); g.addColorStop(1, 'rgba(190,30,0,0)');
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(px * w, py * w);
+      c.quadraticCurveTo(tx * 0.5 + px * w * 0.8 + Math.sin(ph * 2) * 12, ty * 0.5 + py * w * 0.8, tx, ty);
+      c.quadraticCurveTo(tx * 0.5 - px * w * 0.8, ty * 0.5 - py * w * 0.8 + Math.cos(ph * 2) * 12, -px * w, -py * w);
+      c.closePath(); c.fill();
+    }
+    const core = c.createRadialGradient(0, 0, 8, 0, 0, 120);
+    core.addColorStop(0, 'rgba(255,248,210,1)'); core.addColorStop(0.5, 'rgba(255,175,50,0.85)'); core.addColorStop(1, 'rgba(255,80,10,0)');
+    c.fillStyle = core; c.beginPath(); c.arc(0, 0, 120, 0, 7); c.fill();
+    for (let i = 0; i < 22; i++) {
+      const r = rng(i * 7 + 2), life = (lt * (0.6 + r() * 0.6) + r()) % 1;
+      c.fillStyle = 'rgba(255,190,90,' + (1 - life) + ')';
+      c.beginPath(); c.arc((r() - 0.5) * 160 + Math.sin(lt * 3 + i) * 20, -life * 420, 3 + r() * 3, 0, 7); c.fill();
+    }
+    // a face only half-formed in the flames: soft, uneven hollows that come and go
+    c.globalCompositeOperation = 'source-over';
+    const fa = 0.14 + 0.16 * (0.5 + 0.5 * Math.sin(lt * 1.3));
+    const hole = (hx, hy, rx, ry) => {
+      const g = c.createRadialGradient(hx, hy, 1, hx, hy, Math.max(rx, ry));
+      g.addColorStop(0, 'rgba(60,8,0,' + fa + ')'); g.addColorStop(1, 'rgba(60,8,0,0)');
+      c.fillStyle = g; c.beginPath(); c.ellipse(hx, hy, rx, ry, 0, 0, 7); c.fill();
+    };
+    if (ch.face) { hole(-30, -14, 22, 26); hole(34, -10, 20, 28); hole(2, 44, 26, 18); }
+  }
+
+  // A pale arm reaching out of the dark (from under a bed, a doorway, the frame edge).
+  // Origin = where the arm emerges; `dir` = degrees (0 right, -90 up); grows over `reachTime`.
+  function ghostHand(c, ch, k) {
+    const { lt } = k;
+    const q = ease(clamp((lt - (ch.in || 0)) / (ch.reachTime || 1.6)));
+    const L = (ch.len || 420) * lerp(0.2, 1, q);
+    c.rotate(((ch.dir == null ? -90 : ch.dir) * Math.PI) / 180);
+    const g = c.createLinearGradient(0, 0, L, 0);
+    g.addColorStop(0, 'rgba(10,12,10,1)'); g.addColorStop(0.45, '#97a093'); g.addColorStop(1, '#c6cec0');
+    c.fillStyle = g;
+    c.beginPath(); c.moveTo(0, -30); c.quadraticCurveTo(L * 0.5, -22, L - 20, -16); c.lineTo(L - 20, 16); c.quadraticCurveTo(L * 0.5, 24, 0, 30); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(60,70,60,0.45)'; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(L * 0.45, -8); c.lineTo(L - 30, -6); c.moveTo(L * 0.5, 7); c.lineTo(L - 30, 5); c.stroke();
+    c.fillStyle = '#c6cec0'; c.beginPath(); c.ellipse(L, 0, 40, 34, 0, 0, 7); c.fill();
+    c.lineCap = 'round';
+    for (let i = 0; i < 5; i++) {
+      const a = -0.8 + i * 0.38 + Math.sin(lt * 5 + i) * 0.05;
+      const fl = i === 0 ? 55 : 90 - Math.abs(i - 2.5) * 9;
+      const bx = L + Math.cos(a) * 30, by = Math.sin(a) * 30, tx = bx + Math.cos(a) * fl, ty = by + Math.sin(a) * fl;
+      c.strokeStyle = '#c0c8ba'; c.lineWidth = i === 0 ? 13 : 10;
+      c.beginPath(); c.moveTo(bx, by); c.quadraticCurveTo(bx + Math.cos(a + 0.35) * fl * 0.6, by + Math.sin(a + 0.35) * fl * 0.6, tx, ty); c.stroke();
+      c.fillStyle = '#1a1410'; c.beginPath(); c.arc(tx, ty, 5, 0, 7); c.fill();
+    }
+  }
+
+  // Long black hair hanging from the ceiling (origin = top anchor), with an upside-down
+  // face at the end. `descend: true` lowers it over `descendTime`; `face: false` hides the face.
+  function hangingHair(c, ch, k) {
+    const { lt } = k;
+    const q = ch.descend ? ease(clamp((lt - (ch.in || 0)) / (ch.descendTime || 2.5))) : 1;
+    const len = (ch.len || 760) * lerp(0.08, 1, q);
+    const hr = rng(57);
+    c.fillStyle = '#030303';
+    c.beginPath(); c.moveTo(-58, 0); c.quadraticCurveTo(-76, len * 0.5, -42 + Math.sin(lt) * 6, len);
+    c.lineTo(42 + Math.sin(lt + 1) * 6, len); c.quadraticCurveTo(76, len * 0.5, 58, 0); c.closePath(); c.fill();
+    c.strokeStyle = '#030303'; c.lineCap = 'round';
+    for (let i = 0; i < 46; i++) {
+      const x0 = (hr() - 0.5) * 110, sw = Math.sin(lt * 1.2 + i) * 14 * hr(), end = len + hr() * 120;
+      c.lineWidth = 2 + hr() * 6;
+      c.beginPath(); c.moveTo(x0, 0); c.bezierCurveTo(x0 * 1.1, end * 0.4, x0 * 1.25 + sw * 0.5, end * 0.75, x0 * 1.2 + sw, end); c.stroke();
+    }
+    if (ch.face !== false && q > 0.85) {
+      const fy = len - 30;
+      const fg = c.createRadialGradient(0, fy, 4, 0, fy, 56);
+      fg.addColorStop(0, '#d9dfd2'); fg.addColorStop(1, '#848d80');
+      c.fillStyle = fg; c.beginPath(); c.ellipse(0, fy, 42, 54, 0, 0, 7); c.fill();
+      c.fillStyle = '#0c0a09'; c.beginPath(); c.ellipse(-15, fy + 16, 11, 14, 0, 0, 7); c.ellipse(15, fy + 16, 11, 14, 0, 0, 7); c.fill();
+      c.fillStyle = '#ff2a2a'; c.beginPath(); c.arc(-15, fy + 18, 2.6, 0, 7); c.arc(15, fy + 18, 2.6, 0, 7); c.fill();
+      c.fillStyle = '#140c0a'; c.beginPath(); c.ellipse(0, fy - 28, 8, 13, 0, 0, 7); c.fill();
+      c.strokeStyle = '#030303';
+      for (let i = 0; i < 9; i++) { c.lineWidth = 3 + hr() * 3; const x0 = -40 + i * 10; c.beginPath(); c.moveTo(x0, fy - 60); c.quadraticCurveTo(x0 + 4, fy, x0 - 4, fy + 70); c.stroke(); }
+    }
+  }
+
+  const CHARS = {
+    person, ghost, pocong, shadow: shadowFig, eyes, bus: busSide, angkot: angkotSide, money,
+    genderuwo, tuyul, ngesot, banaspati, hand: ghostHand, hair: hangingHair,
+  };
 
   function busPass(sc, lt) {
     const every = sc.passEvery || 2.6;
@@ -1112,10 +1484,13 @@
     const ap = ch.appear || 'cut';
     if (ap === 'fade') alpha = clamp((lt - tin) / 0.6) * clamp((tout - lt) / 0.6);
     else if (ap === 'flicker') alpha = lt - tin < 0.9 ? (R() < 0.45 + (lt - tin) * 0.5 ? 1 : 0) : 1;
+    // `reveal`: only seen when the light allows — during lightning, or in a flickering lamp
+    if (ch.reveal === 'lightning') alpha *= clamp(lightningLevel(sc, lt).lvl * 1.6);
+    else if (ch.reveal === 'flicker') alpha *= hash(lt * 11 + X(ch.x) * 0.01) < 0.35 ? 1 : 0;
     if (alpha <= 0) return;
     let x = X(ch.x);
     if (ch.to != null) x = lerp(X(ch.x), X(ch.to), ch.action === 'approach' ? ease(pw) : pw);
-    let y = ch.type === 'eyes' ? (ch.y == null ? 900 : ch.y) : (ch.y == null ? GY : ch.y);
+    let y = ch.y != null ? ch.y : (ch.type === 'eyes' || ch.type === 'banaspati') ? 900 : ch.type === 'hair' ? 0 : GY;
     let s = (ch.size || 1) * (ch.type === 'eyes' ? 1.8 : 1);
     if (ch.action === 'approach') { const q = ease(pw); s *= lerp(1, ch.grow || 1.8, q); y += lerp(0, ch.type === 'eyes' ? 120 : 280, q); }
     const face = ch.face != null ? ch.face : (ch.to != null && X(ch.to) < X(ch.x) ? -1 : 1);
@@ -1131,11 +1506,56 @@
       c.beginPath(); c.ellipse(0, -260 * s, 70 * s, 260 * s, 0, 0, 7); c.fill();
       c.restore();
     }
+    const kk = { lt, R, pw };
+    const place = (g, ox, oy, tf) => {
+      g.save();
+      if (ch.clip) { g.beginPath(); g.rect(ch.clip[0], ch.clip[1], ch.clip[2], ch.clip[3]); g.clip(); }
+      g.translate(x + (ox || 0), y + (oy || 0));
+      if (tf) g.transform(tf[0], tf[1], tf[2], tf[3], 0, 0);
+      g.scale(s * face, s);
+      draw(g, ch, kk, T);
+      g.restore();
+    };
+    const baseA = alpha * (ch.alpha == null ? 1 : ch.alpha);
+    // `cast`: its shadow thrown big on a wall by a lamp (skewed, blurred). `cast.only` = just the shadow.
+    if (ch.cast) {
+      const cs = ch.cast;
+      // the lamp's pool of light on the wall, so the shadow has something to darken
+      if (cs.light !== false) {
+        const fl = 0.85 + 0.15 * Math.sin(lt * 9) * Math.sin(lt * 3.7);
+        c.save(); c.globalCompositeOperation = 'screen';
+        glowRadial(c, x + (cs.dx || 0), y + (cs.dy || 0) - 380 * s * (cs.sy || 1.6), 20, 760 * s * (cs.sy || 1.6), cs.lightColor || '255,180,100', 0.32 * fl);
+        c.restore();
+      }
+      paintSilhouette(c, cs.color || '#000', baseA * (cs.alpha == null ? 0.75 : cs.alpha), cs.blur == null ? 6 : cs.blur,
+        (g) => place(g, cs.dx, cs.dy, [cs.sx || 1.6, 0, cs.skew || 0, cs.sy || 1.6]));
+      if (cs.only) return;
+    }
+    // `silhouette`: a flat dark shape, e.g. seen through a window or a curtain (pair with `blur`, `clip`)
+    if (ch.silhouette) {
+      paintSilhouette(c, ch.silhouette === true ? '#000' : ch.silhouette, baseA, ch.blur || 0, (g) => place(g));
+      return;
+    }
     c.save();
-    c.globalAlpha = alpha * (ch.alpha == null ? 1 : ch.alpha);
-    c.translate(x, y); c.scale(s * face, s);
-    draw(c, ch, { lt, R, pw }, T);
+    c.globalAlpha = baseA;
+    if (ch.blur) c.filter = 'blur(' + ch.blur * SC + 'px)';
+    place(c);
     c.restore();
+  }
+
+  // Renders a character into an offscreen layer, flattens it to one color, then composites it.
+  const stage = document.createElement('canvas'); stage.width = W; stage.height = H;
+  const sctx = stage.getContext('2d');
+  function paintSilhouette(c, color, alpha, blur, placeFn) {
+    sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, W, H);
+    sctx.setTransform(c.getTransform()); sctx.globalAlpha = 1;
+    placeFn(sctx);
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.globalCompositeOperation = 'source-in'; sctx.fillStyle = color; sctx.fillRect(0, 0, W, H);
+    sctx.globalCompositeOperation = 'source-over';
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = alpha;
+    if (blur) c.filter = 'blur(' + blur * SC + 'px)';
+    c.drawImage(stage, 0, 0); c.restore();
   }
 
   // ---------- effects ----------
@@ -1314,6 +1734,40 @@
     });
     c.globalAlpha = 1;
   }
+  // Voice-over subtitles: cues on the global clock (seconds from video start), from an .srt.
+  const SUBS = Array.isArray(S.subs) ? S.subs : [];
+  function subtitles(c, t) {
+    let cue = null;
+    for (let i = 0; i < SUBS.length; i++) if (t >= SUBS[i].start && t < SUBS[i].end) { cue = SUBS[i]; break; }
+    if (!cue) return;
+    const a = 0.35 + 0.65 * clamp((t - cue.start) / 0.12);
+    const words = parseWords(cue.text);
+    let size = 64, lines, sp;
+    do {
+      c.font = '800 ' + size + 'px "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+      ({ lines, sp } = layoutLines(c, words, 920));
+      size -= 4;
+    } while (lines.length > 2 && size > 40);
+    size += 4;
+    const lh = size * 1.25;
+    let y = 1600 - (lines.length - 1) * lh / 2;
+    const pop = 1 + (1 - clamp((t - cue.start) / 0.12)) * 0.06;
+    c.save();
+    c.globalAlpha = a; c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+    c.translate(540, 1600); c.scale(pop, pop); c.translate(-540, -1600);
+    lines.forEach((ln) => {
+      let x = 540 - ln.width / 2;
+      ln.words.forEach((wd) => {
+        c.lineWidth = 12; c.strokeStyle = 'rgba(0,0,0,0.9)'; c.strokeText(wd.w, x, y);
+        c.fillStyle = wd.em ? ACC : '#f3efe6';
+        if (wd.em) { c.shadowColor = ACC; c.shadowBlur = 24; }
+        c.fillText(wd.w, x, y); c.shadowBlur = 0;
+        x += wd.m + sp;
+      });
+      y += lh;
+    });
+    c.restore();
+  }
   function title(c, sc, lt, f) {
     if (!sc.title) return;
     const a = clamp(lt / 0.8) * (hash(f * 0.5 + 11) < 0.08 ? 0.35 : 1);
@@ -1428,7 +1882,10 @@
       ctx.setTransform(SC, 0, 0, SC, 0, 0);
     }
 
-    if (scare < 0) { title(ctx, sc, lt, f); caption(ctx, sc, lt); }
+    if (scare < 0) {
+      title(ctx, sc, lt, f);
+      if (!S.hideCaptions) caption(ctx, sc, lt);
+    }
 
     // scene fades
     const next = scenes[sc.i + 1];
@@ -1440,6 +1897,8 @@
     if (sc.i === 0 && lt < fin) dark = 1 - lt / fin;
     if (dark > 0) { ctx.fillStyle = 'rgba(0,0,0,' + dark + ')'; ctx.fillRect(0, 0, LW, LH); }
 
+    // Drawn after scene fades: narration runs across cuts, so its text must not dip to black.
+    if (scare < 0) subtitles(ctx, t);
     chrome(ctx);
   }
 

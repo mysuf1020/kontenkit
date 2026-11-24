@@ -40,8 +40,11 @@ Kalau `scripts/node_modules` belum ada: `cd <skill-dir>/scripts && npm install`.
    node <skill-dir>/scripts/render.mjs <slug>.js --draft    # 540x960 24fps, cepat untuk cek alur
    ```
    Render penuh ±1–3 menit untuk 60 detik video. Jalankan di background bila tool mendukung.
-   Opsi: `--voice narasi.mp3` (voice-over, ambience otomatis dikecilkan), `--music musik.mp3`, `--no-audio`, `--out nama.mp4`.
-6. **Verifikasi hasil:** cek durasi dengan `ffprobe -v error -show_entries format=duration -of csv=p=0 <file>.mp4`, lalu ambil 1–2 frame (`ffmpeg -ss 20 -i <file>.mp4 -frames:v 1 cek.png`) untuk memastikan render tidak rusak.
+   Opsi: `--voice narasi.mp3` (voice-over, ambience otomatis dikecilkan), `--music musik.mp3`, `--no-audio`, `--out nama.mp4`, `--subs narasi.srt`, `--no-subs`, `--keep-captions`.
+
+   **Subtitle VO.** Kalau `--voice` dipakai dan ada file `.srt` bernama sama di sebelah audionya (skill `voice` membuatnya otomatis: `x.vo.wav` → `x.vo.srt`), subtitle yang sinkron dengan suara ikut di-burn ke video. Teks `caption` per scene otomatis disembunyikan supaya tidak dobel (`--keep-captions` untuk tetap menampilkannya, `--no-subs` untuk mematikan subtitle). `--subs file.srt` memakai SRT lain, termasuk yang diedit tangan; `*kata*` di SRT jadi warna aksen.
+   Saat membuat video dari VO yang sudah ada, baca `.srt`-nya dulu dan atur `dur` tiap scene mengikuti waktu narasinya, dengan total durasi story ≥ akhir baris SRT terakhir + ±1,5 dtk. Renderer memberi peringatan kalau narasi lebih panjang dari story.
+6. **Verifikasi hasil:** cek durasi dengan `ffprobe -v error -show_entries format=duration -of csv=p=0 <file>.mp4`, lalu ambil 1–2 frame (`ffmpeg -ss 20 -i <file>.mp4 -frames:v 1 cek.png`) untuk memastikan render tidak rusak. Kalau pakai subtitle, ambil frame di tengah salah satu baris SRT dan pastikan teksnya muncul.
 7. **Laporkan** path MP4, durasi, dan naskah final. Sarankan voice-over (rekam sendiri / TTS) bila user ingin narasi suara — renderer hanya membuat ambience dan efek suara, bukan suara manusia.
 
 ## Aturan penting

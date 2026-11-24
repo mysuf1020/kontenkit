@@ -118,7 +118,9 @@ export function parseLines(script, warn = () => {}) {
     });
     text = [...inlineLead, text].join(' ').replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    items.push({ text, style });
+    // What the subtitle shows: the spoken words only, never tags or vocal sounds.
+    const display = text.replace(/<[^<>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    items.push({ text, style, display });
   }
   return items;
 }
@@ -134,10 +136,75 @@ export function toSegments(items) {
       continue;
     }
     const key = it.style.join('|');
-    if (last && last.text !== undefined && last.key === key) last.text += ' ' + it.text;
-    else segs.push({ text: it.text, style: it.style, key });
+    const lines = it.display ? [it.display] : [];
+    if (last && last.text !== undefined && last.key === key) { last.text += ' ' + it.text; last.lines.push(...lines); }
+    else segs.push({ text: it.text, style: it.style, key, lines });
   }
   return segs;
+}
+
+// ---------- subtitles ----------
+
+// [start, end] seconds of audible speech inside a clip, so model-added leading/trailing
+// silence does not shift the subtitles. 10 ms windows, peak above ~2% full scale.
+export function voicedRange(pcm) {
+  const win = SAMPLE_RATE / 100, n = Math.floor(pcm.length / 2);
+  let first = -1, last = -1;
+  for (let w = 0; w * win < n; w++) {
+    let peak = 0;
+    for (let i = w * win; i < Math.min(n, (w + 1) * win); i++) peak = Math.max(peak, Math.abs(pcm.readInt16LE(i * 2)));
+    if (peak > 650) { if (first < 0) first = w; last = w; }
+  }
+  if (first < 0) return [0, n / SAMPLE_RATE];
+  return [first * win / SAMPLE_RATE, Math.min(n, (last + 1) * win) / SAMPLE_RATE];
+}
+
+// Break one VO line into screen-sized cues (≤7 words / ≤38 chars): split at punctuation
+// first, cut any still-long clause into even parts, then rejoin short whole clauses that fit.
+const CUE_WORDS = 7, CUE_CHARS = 38;
+const fits = (s) => s.split(' ').length <= CUE_WORDS && s.length <= CUE_CHARS;
+export function splitCue(line) {
+  const cues = [];
+  let lastWhole = false;
+  for (const clause of line.split(/(?<=[,.;:!?…])\s+/)) {
+    const words = clause.split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    const k = Math.max(1, Math.ceil(words.length / CUE_WORDS), Math.ceil(clause.length / CUE_CHARS));
+    if (k === 1 && lastWhole && fits(cues[cues.length - 1] + ' ' + clause)) {
+      cues[cues.length - 1] += ' ' + clause;
+      continue;
+    }
+    for (let i = 0; i < k; i++) {
+      const part = words.slice(Math.round((i * words.length) / k), Math.round(((i + 1) * words.length) / k));
+      if (part.length) cues.push(part.join(' '));
+    }
+    lastWhole = k === 1;
+  }
+  return cues;
+}
+
+// Spread a merged segment's lines over its voiced span, weighted by text length.
+// Timing inside a segment is an estimate; segment boundaries come from the real audio.
+export function timeLines(lines, t0, t1) {
+  const cues = lines.flatMap(splitCue);
+  const weight = (c) => c.length + 4;
+  const total = cues.reduce((a, c) => a + weight(c), 0);
+  let t = t0;
+  return cues.map((text) => {
+    const start = t;
+    t += (t1 - t0) * weight(text) / total;
+    return { start, end: t, text };
+  });
+}
+
+function srtTime(sec) {
+  const ms = Math.max(0, Math.round(sec * 1000));
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+}
+
+export function toSrt(cues) {
+  return cues.map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`).join('\n');
 }
 
 function styleFor(base, words) {
@@ -284,9 +351,12 @@ async function generate(opts) {
   if (!opts['no-cache']) mkdirSync(cacheDir, { recursive: true });
 
   const parts = [];
+  const cues = [];
+  let bytes = 0;
+  const push = (buf) => { parts.push(buf); bytes += buf.length; };
   let n = 0;
   for (const s of segs) {
-    if (s.silence !== undefined) { parts.push(silencePcm(s.silence)); continue; }
+    if (s.silence !== undefined) { push(silencePcm(s.silence)); continue; }
     n++;
     const fullStyle = styleFor(style, s.style);
     const hash = createHash('sha256').update(JSON.stringify([model, voice, fullStyle, s.text])).digest('hex').slice(0, 16);
@@ -306,10 +376,13 @@ async function generate(opts) {
     }
     // Small breath between consecutive spoken segments, unless a pause line already separates them.
     const prev = parts.length ? segs[segs.indexOf(s) - 1] : null;
-    if (prev && prev.text !== undefined && gap > 0) parts.push(silencePcm(gap));
-    parts.push(pcm);
+    if (prev && prev.text !== undefined && gap > 0) push(silencePcm(gap));
+    const at = bytes / 2 / SAMPLE_RATE;
+    const [v0, v1] = voicedRange(pcm);
+    if (s.lines.length) cues.push(...timeLines(s.lines, at + v0, at + v1));
+    push(pcm);
   }
-  parts.push(silencePcm(0.5));
+  push(silencePcm(0.5));
 
   const pcm = Buffer.concat(parts);
   const seconds = pcm.length / 2 / SAMPLE_RATE;
@@ -323,7 +396,10 @@ async function generate(opts) {
     ffmpeg(['-i', tmp, ...(extname(out).toLowerCase() === '.mp3' ? ['-codec:a', 'libmp3lame', '-q:a', '2'] : []), out]);
     rmSync(tmp, { force: true });
   }
+  const srt = out.slice(0, out.length - extname(out).length) + '.srt';
+  writeFileSync(srt, toSrt(cues));
   console.log(`\nSelesai: ${out} (${seconds.toFixed(1)} dtk)`);
+  console.log(`Subtitle: ${srt} (${cues.length} baris)`);
 }
 
 function loadAsWav24k(path) {

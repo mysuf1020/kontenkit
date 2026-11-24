@@ -1,0 +1,15 @@
+{
+  "name": "mysuf-horror",
+  "description": "Skill Claude Code untuk konten horor pendek berbahasa Indonesia.",
+  "owner": {
+    "name": "mysuf1020",
+    "url": "https://github.com/mysuf1020"
+  },
+  "plugins": [
+    {
+      "name": "mysuf-horror",
+      "source": "./plugins/mysuf-horror",
+      "description": "Naskah horor TikTok/Reels/Shorts siap TTS Google AI Studio, plus render animasi horor siluet 9:16 ke MP4."
+    }
+  ]
+}

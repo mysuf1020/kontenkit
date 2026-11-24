@@ -1,0 +1,11 @@
+{
+  "name": "mysuf-horror",
+  "version": "1.0.0",
+  "description": "Naskah horor TikTok/Reels/Shorts siap TTS Google AI Studio, plus render animasi horor siluet 9:16 ke MP4.",
+  "author": {
+    "name": "mysuf1020",
+    "url": "https://github.com/mysuf1020"
+  },
+  "repository": "https://github.com/mysuf1020/mysuf-horror",
+  "keywords": ["horror", "tiktok", "reels", "shorts", "indonesia", "tts"]
+}

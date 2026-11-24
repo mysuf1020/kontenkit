@@ -1,0 +1,9 @@
+{
+  "name": "horror-anim-renderer",
+  "private": true,
+  "type": "module",
+  "description": "Renders horror-anim story files to 9:16 MP4",
+  "dependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}

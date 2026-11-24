@@ -3,7 +3,7 @@ name: voice
 description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script. Mode manual (default, gratis tanpa API key) memecah naskah jadi potongan siap tempel ke Google AI Studio Generate Speech lalu menggabungkan file hasil download jadi satu narasi dengan jeda pas, volume seragam, dan subtitle .srt; mode otomatis me-render langsung lewat Gemini API. Hasilnya siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini atau suara user sendiri (voice replication, Gemini API paid tier). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
 ---
 
-# voice (mysuf-horror)
+# voice (kontenkit)
 
 Naskah VO masuk, file audio narasi keluar. Skrip `scripts/tts.mjs` membaca tag ekspresi, memecah naskah per emosi, menyisipkan jeda dengan durasi pasti, dan menggabungkan semuanya jadi satu file plus subtitle `.srt`. Ada dua mode:
 

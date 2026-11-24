@@ -46,7 +46,8 @@ Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/
    ```
    Opsi: `--out x.wav|x.mp3` (default `<nama>.vo.wav`), `--voice`, `--style "..."` (menimpa style dari file), `--model` (default `gemini-3.8-flash-tts`; `gemini-3.8-flash-lite-tts` lebih hemat), `--gap 0.2` (jeda antar-segmen tanpa tag jeda, detik), `--no-cache`.
    Jalankan di background kalau naskah panjang: tiap segmen satu request, dan skrip otomatis menunggu lalu mencoba lagi saat kena batas kuota (HTTP 429).
-5. **Laporkan** path file, durasi, suara yang dipakai, dan jumlah segmen. Tawarkan langkah lanjut: pasang ke video dengan skill `anim` (`--voice narasi.mp3`), atau ganti suara/style kalau hasilnya kurang pas.
+   Selain audio, skrip selalu menulis **subtitle `.srt`** bernama sama di sebelahnya (`narasi.mp3` → `narasi.srt`): tag dan suara napas dibuang, tiap baris naskah dipecah jadi potongan ≤7 kata. Awal-akhir tiap segmen diukur dari audio aslinya; pembagian waktu antar-baris di dalam satu segmen (baris berurutan dengan emosi sama) diperkirakan dari panjang teks. SRT ini bisa diedit tangan, dan juga bisa diunggah langsung sebagai subtitle ke YouTube/TikTok.
+5. **Laporkan** path audio dan SRT, durasi, suara yang dipakai, dan jumlah segmen. Tawarkan langkah lanjut: pasang ke video dengan skill `anim` (`--voice narasi.mp3` — SRT di sebelahnya otomatis jadi subtitle), atau ganti suara/style kalau hasilnya kurang pas.
 
 Kalau render gagal di tengah, segmen yang sudah jadi tersimpan di `.vo-cache/` di samping file output — jalankan ulang perintah yang sama dan hanya segmen yang belum jadi yang diminta ulang. Mengubah satu baris naskah juga hanya me-render ulang baris itu.
 

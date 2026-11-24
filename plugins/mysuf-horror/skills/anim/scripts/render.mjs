@@ -3,6 +3,11 @@
 //
 //   node render.mjs <story.js> [--out video.mp4] [--draft] [--stills 1.5,8,20]
 //                   [--voice narasi.mp3] [--music musik.mp3] [--no-audio]
+//                   [--subs narasi.srt] [--no-subs] [--keep-captions]
+//
+// With --voice, a .srt of the same name next to the audio (written by the voice skill)
+// is burned in as subtitles automatically; scene captions are then hidden unless
+// --keep-captions is given.
 //
 // Needs: Node 18+, ffmpeg on PATH, and Chrome/Chromium/Edge (or CHROME_PATH).
 import fs from 'node:fs';
@@ -15,10 +20,13 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ENGINE = path.join(HERE, '..', 'engine', 'engine.js');
 
 function parseArgs(argv) {
-  const a = { story: null, out: null, draft: false, stills: null, voice: null, music: null, audio: true };
+  const a = { story: null, out: null, draft: false, stills: null, voice: null, music: null, audio: true, subs: null, noSubs: false, keepCaptions: false };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
     if (v === '--out') a.out = argv[++i];
+    else if (v === '--subs') a.subs = argv[++i];
+    else if (v === '--no-subs') a.noSubs = true;
+    else if (v === '--keep-captions') a.keepCaptions = true;
     else if (v === '--draft') a.draft = true;
     else if (v === '--stills') a.stills = argv[++i].split(',').map(Number).filter((n) => !Number.isNaN(n));
     else if (v === '--voice') a.voice = argv[++i];
@@ -27,8 +35,33 @@ function parseArgs(argv) {
     else if (!v.startsWith('--') && !a.story) a.story = v;
     else throw new Error('Unknown argument: ' + v);
   }
-  if (!a.story) throw new Error('Usage: node render.mjs <story.js> [--out file.mp4] [--draft] [--stills 1,5] [--voice f] [--music f] [--no-audio]');
+  if (!a.story) throw new Error('Usage: node render.mjs <story.js> [--out file.mp4] [--draft] [--stills 1,5] [--voice f] [--music f] [--no-audio] [--subs f.srt] [--no-subs] [--keep-captions]');
   return a;
+}
+
+export function parseSrt(text) {
+  const t = (s) => { const [h, m, rest] = s.trim().replace('.', ',').split(':'); const [sec, ms] = rest.split(','); return +h * 3600 + +m * 60 + +sec + +(ms || 0) / 1000; };
+  return text.replace(/\r/g, '').split(/\n\s*\n/).map((block) => {
+    const lines = block.trim().split('\n');
+    const i = lines.findIndex((l) => l.includes('-->'));
+    if (i < 0) return null;
+    const [a, b] = lines[i].split('-->');
+    const txt = lines.slice(i + 1).join(' ').replace(/<[^>]*>/g, '').trim();
+    return txt ? { start: t(a), end: t(b), text: txt } : null;
+  }).filter(Boolean);
+}
+
+function resolveSubs(opts) {
+  if (opts.noSubs) return null;
+  if (opts.subs) {
+    if (!fs.existsSync(opts.subs)) throw new Error('Subtitle file not found: ' + opts.subs);
+    return opts.subs;
+  }
+  if (opts.voice) {
+    const guess = opts.voice.replace(/\.[^./\\]+$/, '') + '.srt';
+    if (fs.existsSync(guess)) return guess;
+  }
+  return null;
 }
 
 function findChrome() {
@@ -132,6 +165,12 @@ async function main() {
   const S = loadStory(storyPath, opts.draft);
   const base = storyPath.replace(/\.js$/i, '');
   const out = path.resolve(opts.out || base + (opts.draft ? '_draft' : '') + '.mp4');
+  const subsFile = resolveSubs(opts);
+  if (subsFile) {
+    S.subs = parseSrt(fs.readFileSync(subsFile, 'utf8'));
+    if (!opts.keepCaptions) S.hideCaptions = true;
+    console.log(`Subtitles: ${subsFile} (${S.subs.length} cues${S.hideCaptions ? ', scene captions hidden' : ''})`);
+  }
 
   const engine = fs.readFileSync(ENGINE, 'utf8');
   const html = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000">
@@ -147,6 +186,8 @@ async function main() {
     if (errors.length) throw new Error('Engine error: ' + errors.join('\n'));
     const info = await page.evaluate(() => window.__info);
     console.log(`Story: ${S.scenes.length} scenes, ${info.TOTAL.toFixed(1)}s, ${info.W}x${info.H} @ ${info.FPS}fps (${info.frames} frames)`);
+    const lastSub = S.subs && S.subs.length ? S.subs[S.subs.length - 1].end : 0;
+    if (lastSub > info.TOTAL) console.warn(`WARNING: narration/subtitles run to ${lastSub.toFixed(1)}s but the story is ${info.TOTAL.toFixed(1)}s — lengthen scene durations or the ending gets cut.`);
 
     if (opts.stills) {
       for (const sec of opts.stills) {
@@ -190,4 +231,5 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e.message || e); process.exit(1); });
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) main().catch((e) => { console.error(e.message || e); process.exit(1); });

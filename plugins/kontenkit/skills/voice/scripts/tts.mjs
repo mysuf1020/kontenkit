@@ -9,12 +9,13 @@
 // Manual mode (Google AI Studio web, free, no API key):
 //   node tts.mjs prep <naskah.md> [--dir folder] [--voice Nama]   -> potongan.md + rencana.json
 //   node tts.mjs stitch <folder> [file1 file2 ...] [--out narasi.mp3] [--gap 0.4]
+//   node tts.mjs align <naskah.md> <take.wav> [--out x.vo.wav] [--whisper-model f] [--lang id]  -> one full take
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, extname, basename } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
@@ -584,6 +585,223 @@ async function stitch(opts) {
   console.log(`Subtitle: ${srt} (${cues.length} baris)`);
 }
 
+// ---------- align: one full AI Studio take -> clean VO + synced subtitles ----------
+
+const DEFAULT_WHISPER_MODEL = join(homedir(), 'whisper-models', 'ggml-base.bin');
+
+// Speech gaps in a clip: runs of quiet 10 ms frames, at least `minLen` seconds long.
+export function findGaps(pcm, minLen = 0.25) {
+  const fr = SAMPLE_RATE / 100, n = Math.floor(pcm.length / 2), voiced = [];
+  for (let f = 0; f * fr < n; f++) {
+    let p = 0;
+    for (let i = f * fr; i < Math.min(n, (f + 1) * fr); i++) p = Math.max(p, Math.abs(pcm.readInt16LE(i * 2)));
+    voiced.push(p > 900);
+  }
+  const first = voiced.indexOf(true), last = voiced.lastIndexOf(true);
+  const gaps = [];
+  let s = -1;
+  for (let f = first; f <= last; f++) {
+    if (!voiced[f] && s < 0) s = f;
+    if (voiced[f] && s >= 0) { if ((f - s) / 100 >= minLen) gaps.push({ a: s / 100, b: f / 100, len: (f - s) / 100 }); s = -1; }
+  }
+  return { gaps, t0: Math.max(0, first) / 100, t1: (last + 1) / 100 };
+}
+
+const fold = (t) => t.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '');
+const bigrams = (t) => { const s = fold(t), out = new Set(); for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2)); return out; };
+
+// Share of a whisper segment's letter pairs found in `bg`. Whisper mishears whispered
+// Indonesian badly, so this is fuzzy on purpose.
+function containment(seg, bg) {
+  const a = bigrams(seg.text);
+  if (a.size < 2) return 0;
+  let hit = 0;
+  for (const x of a) if (bg.has(x)) hit++;
+  return hit / a.size;
+}
+// Short segments ("Saya.", "Nitu?") share letters with almost any line, so they count for little.
+const segScore = (seg, line) => containment(seg, line.bg) * Math.min(1, bigrams(seg.text).size / 6);
+
+// A line's opening word (two words when the first is shorter than 4 letters), as letter pairs.
+const opening = (t) => {
+  const w = t.split(/\s+/).map(fold).filter(Boolean);
+  return bigrams(w[0]?.length >= 4 ? w[0] : w.slice(0, 2).join(''));
+};
+// Does this segment begin with the line's opening word? Compares against the segment's first
+// letters only, so a later word of the line ("Cuma" in "Sepi. Cuma ...") never counts.
+function startsLike(seg, head) {
+  if (head.size < 2) return false;
+  const start = bigrams(fold(seg.text).slice(0, 10));
+  let hit = 0;
+  for (const x of head) if (start.has(x)) hit++;
+  return hit / head.size >= 0.6;
+}
+
+// Assign whisper segments to lines in order (each segment to one line or skipped).
+export function anchorLines(lines, segs) {
+  const L = lines.length, S = segs.length, NEG = -1e9;
+  const ln = lines.map((t) => ({ t, bg: bigrams(t), head: opening(t) }));
+  // best[j][i]: best total using segments < j with the last assigned line <= i
+  const best = Array.from({ length: S + 1 }, () => new Array(L).fill(NEG));
+  const from = Array.from({ length: S + 1 }, () => new Array(L).fill(null));
+  best[0].fill(0);
+  for (let j = 0; j < S; j++) {
+    for (let i = 0; i < L; i++) {
+      // skip segment j
+      if (best[j][i] > best[j + 1][i]) { best[j + 1][i] = best[j][i]; from[j + 1][i] = { i, take: false }; }
+      // assign segment j to line i (previous assignments to lines <= i)
+      const sc = segScore(segs[j], ln[i]) - 0.15;
+      if (sc > 0 && best[j][i] + sc > best[j + 1][i]) { best[j + 1][i] = best[j][i] + sc; from[j + 1][i] = { i, take: true }; }
+    }
+    for (let i = 1; i < L; i++) if (best[j + 1][i - 1] > best[j + 1][i]) { best[j + 1][i] = best[j + 1][i - 1]; from[j + 1][i] = { i: i - 1, carry: true }; }
+  }
+  const assigned = Array.from({ length: L }, () => []);
+  let j = S, i = L - 1;
+  while (j > 0) {
+    const f = from[j][i];
+    if (!f) break;
+    if (f.carry) { i = f.i; continue; }
+    if (f.take) assigned[i].unshift(segs[j - 1]);
+    j--;
+  }
+  // head: when the line starts (a segment beginning with its opening word; short ones like
+  // "Satu!" count). inside: times the line is clearly being spoken, used only as limits.
+  return assigned.map((list, k) => {
+    const head = list.find((s) => startsLike(s, ln[k].head));
+    const inside = list.filter((s) => s === head || (bigrams(s.text).size >= 5 && containment(s, ln[k].bg) >= 0.6)).map((s) => s.start);
+    return { head: head ? head.start : null, inside };
+  });
+}
+
+// Pick one silence gap between each pair of consecutive lines, in order. A line start is pulled
+// toward its head anchor and may not come after a time the line is known to be spoken, nor end
+// before one; otherwise line lengths follow text length.
+export function pickBoundaries(lines, anchors, gaps, t0, t1) {
+  anchors = anchors.map((a) => a ?? { head: null, inside: [] });
+  const L = lines.length, G = gaps.length;
+  if (L < 2) return [];
+  if (G < L - 1) return null;
+  const chars = lines.map((l) => fold(l).length + 3), C = chars.reduce((a, b) => a + b, 0);
+  const speech = (t1 - t0) - gaps.reduce((x, g) => x + g.len, 0);
+  const talk = (a, b) => (b - a) - gaps.filter((g) => g.a >= a && g.b <= b).reduce((x, g) => x + g.len, 0);
+  const lenCost = (i, a, b) => { const e = speech * chars[i] / C; return 0.3 * ((talk(a, b) - e) / Math.max(1, e)) ** 2; };
+  const SLACK = 0.9, BREAK = 25;
+  // Gap g ends line i and starts line i+1.
+  const edge = (i, g) => {
+    const next = anchors[i + 1], cur = anchors[i];
+    // Whisper stamps the start of its listening window, which is at or a little before the
+    // word, so a start up to ~0.6 s after the stamp is free and one before it is costly.
+    const h = next.head;
+    let c = h == null ? 0 : g.b < h - 0.3 ? 4 * Math.min(4, h - g.b) ** 2 : Math.max(0, g.b - h - 0.6) ** 2;
+    if (next.inside.some((s) => g.b > s + SLACK)) c += BREAK;
+    if (cur.inside.some((s) => g.a < s - SLACK)) c += BREAK;
+    return c - 0.1 * Math.min(g.len, 2);
+  };
+  const INF = 1e18;
+  const cost = Array.from({ length: L - 1 }, () => new Array(G).fill(INF));
+  const prev = Array.from({ length: L - 1 }, () => new Array(G).fill(-1));
+  for (let k = 0; k < G; k++) cost[0][k] = lenCost(0, t0, gaps[k].a) + edge(0, gaps[k]);
+  for (let i = 1; i < L - 1; i++) {
+    for (let k = i; k < G; k++) {
+      for (let p = i - 1; p < k; p++) {
+        if (cost[i - 1][p] >= INF) continue;
+        const c = cost[i - 1][p] + lenCost(i, gaps[p].b, gaps[k].a) + edge(i, gaps[k]);
+        if (c < cost[i][k]) { cost[i][k] = c; prev[i][k] = p; }
+      }
+    }
+  }
+  let end = -1, bestC = INF;
+  for (let k = L - 2; k < G; k++) {
+    const c = cost[L - 2][k] + lenCost(L - 1, gaps[k].b, t1);
+    if (c < bestC) { bestC = c; end = k; }
+  }
+  const picked = new Array(L - 1);
+  for (let i = L - 2, k = end; i >= 0; i--) { picked[i] = gaps[k]; k = prev[i][k]; }
+  return picked;
+}
+
+function filterPath(p) {
+  // Inside an ffmpeg filter graph ':' separates options and '\' escapes; both need escaping twice.
+  return p.replace(/\\/g, '/').replace(/:/g, '\\\\:');
+}
+
+function whisperSegments(wavPath, model, lang) {
+  const out = join(tmpdir(), `vo-whisper-${process.pid}.json`);
+  rmSync(out, { force: true });
+  const af = `aresample=16000,whisper=model=${filterPath(model)}:language=${lang}:queue=1:destination=${filterPath(out)}:format=json`;
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', wavPath, '-af', af, '-f', 'null', '-'], { encoding: 'utf8' });
+  if (r.status !== 0 || !existsSync(out)) throw new Error(r.stderr || 'whisper tidak menghasilkan output');
+  const segs = readFileSync(out, 'utf8').split(/\r?\n/).map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter((s) => s && typeof s.text === 'string' && !/^\s*[[*(]/.test(s.text))
+    .map((s) => ({ start: s.start / 1000, end: s.end / 1000, text: s.text.trim() }));
+  rmSync(out, { force: true });
+  return segs;
+}
+
+function hasWhisperFilter() {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-filters'], { encoding: 'utf8' });
+  return r.status === 0 && /\swhisper\s/.test(r.stdout);
+}
+
+async function align(opts) {
+  const [, input, take] = opts._;
+  if (!input || !take) die('pakai: node tts.mjs align <naskah.md> <take.wav|mp3|m4a> [--out x.vo.wav] [--whisper-model ggml-base.bin] [--lang id]');
+  if (!existsSync(input)) die(`file tidak ada: ${input}`);
+  if (!existsSync(take)) die(`file tidak ada: ${take}`);
+  if (!hasFfmpeg()) die('ffmpeg tidak ditemukan; align butuh ffmpeg');
+  const out = resolve(opts.out || join(dirname(take), basename(input, extname(input)) + '.vo.wav'));
+  if (resolve(take) === out) die('--out tidak boleh sama dengan file take; take asli tidak ditimpa');
+
+  const lines = parseLines(readScript(readFileSync(input, 'utf8')).script).filter((it) => it.display).map((it) => it.display);
+  if (!lines.length) die('tidak ada teks yang bisa dibacakan di naskah');
+
+  // Same cleanup as stitch: edge silence trimmed, loudness normalized; small lead-in and tail.
+  const pcm = Buffer.concat([silencePcm(0.2), decodeTrimmed(take), silencePcm(0.5)]);
+  const { gaps, t0, t1 } = findGaps(pcm);
+
+  const model = resolve(opts['whisper-model'] || process.env.WHISPER_MODEL || DEFAULT_WHISPER_MODEL);
+  let anchors = new Array(lines.length).fill(null), how = 'tanpa whisper (perkiraan dari panjang teks dan jeda)';
+  if (!hasWhisperFilter()) console.warn('  peringatan: ffmpeg ini tidak punya filter whisper; subtitle hanya perkiraan');
+  else if (!existsSync(model)) console.warn(`  peringatan: model whisper tidak ada di ${model}; subtitle hanya perkiraan`);
+  else {
+    const tmp = join(tmpdir(), `vo-align-${process.pid}.wav`);
+    writeFileSync(tmp, pcmToWav(pcm));
+    try {
+      const segs = whisperSegments(tmp, model, opts.lang || 'id');
+      anchors = anchorLines(lines, segs);
+      how = `whisper (${basename(model)}), ${anchors.filter((a) => a.head != null).length}/${lines.length} awal baris terkunci, ${anchors.filter((a) => a.head == null && a.inside.length).length} dibatasi`;
+    } catch (e) {
+      console.warn(`  peringatan: whisper gagal, subtitle hanya perkiraan — ${e.message.split('\n')[0]}`);
+    } finally {
+      rmSync(tmp, { force: true });
+    }
+  }
+
+  const bounds = pickBoundaries(lines, anchors, gaps, t0, t1);
+  if (!bounds) die(`audio hanya punya ${gaps.length} jeda untuk ${lines.length} baris; apakah take ini cocok dengan naskahnya?`);
+  const cues = lines.flatMap((l, i) => timeLines([l], i ? bounds[i - 1].b : t0, i < lines.length - 1 ? bounds[i].a : t1));
+  // Keep each cue up a little longer (until the next starts, max +0.8 s) so short lines stay readable.
+  cues.forEach((c, i) => { c.end = Math.min(cues[i + 1]?.start ?? c.end + 0.8, c.end + 0.8); });
+
+  mkdirSync(dirname(out), { recursive: true });
+  if (extname(out).toLowerCase() === '.wav') writeFileSync(out, pcmToWav(pcm));
+  else {
+    const tmp = join(tmpdir(), `vo-align-out-${process.pid}.wav`);
+    writeFileSync(tmp, pcmToWav(pcm));
+    ffmpeg(['-i', tmp, ...(extname(out).toLowerCase() === '.mp3' ? ['-codec:a', 'libmp3lame', '-q:a', '2'] : []), out]);
+    rmSync(tmp, { force: true });
+  }
+  const srt = out.slice(0, out.length - extname(out).length) + '.srt';
+  writeFileSync(srt, toSrt(cues));
+  console.log(`Timing: ${how}`);
+  lines.forEach((l, i) => {
+    const a = i ? bounds[i - 1].b : t0, b = i < lines.length - 1 ? bounds[i].a : t1;
+    console.log(`  ${a.toFixed(2).padStart(6)}–${b.toFixed(2).padStart(6)}  ${l}`);
+  });
+  console.log(`\nSelesai: ${out} (${(pcm.length / 2 / SAMPLE_RATE).toFixed(1)} dtk)`);
+  console.log(`Subtitle: ${srt} (${cues.length} baris)`);
+}
+
 function loadAsWav24k(path) {
   if (!existsSync(path)) die(`file tidak ada: ${path}`);
   if (!hasFfmpeg()) {
@@ -645,6 +863,6 @@ async function clone(opts) {
 const isMain = process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2));
-  const run = { clone, prep, stitch }[opts._[0]] ?? generate;
+  const run = { clone, prep, stitch, align }[opts._[0]] ?? generate;
   run(opts).catch((e) => die(e.message));
 }

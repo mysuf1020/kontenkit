@@ -1,20 +1,35 @@
 ---
 name: voice
-description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script. Mode manual (default, gratis tanpa API key) memecah naskah jadi potongan siap tempel ke Google AI Studio Generate Speech lalu menggabungkan file hasil download jadi satu narasi dengan jeda pas, volume seragam, dan subtitle .srt; mode otomatis me-render langsung lewat Gemini API. Hasilnya siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini atau suara user sendiri (voice replication, Gemini API paid tier). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
+description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script. Mode satu take (default, gratis tanpa API key): user menempel seluruh naskah ke Google AI Studio Generate Speech, lalu satu file audionya dirapikan (volume seragam, hening dipotong) dan diberi subtitle .srt yang sinkron lewat whisper; mode potongan memecah naskah jadi bagian siap tempel lalu menggabungkannya; mode otomatis me-render langsung lewat Gemini API. Hasilnya siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini atau suara user sendiri (voice replication, Gemini API paid tier). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
 ---
 
 # voice (kontenkit)
 
-Naskah VO masuk, file audio narasi keluar. Skrip `scripts/tts.mjs` membaca tag ekspresi, memecah naskah per emosi, menyisipkan jeda dengan durasi pasti, dan menggabungkan semuanya jadi satu file plus subtitle `.srt`. Ada dua mode:
+Naskah VO masuk, file audio narasi keluar. Skrip `scripts/tts.mjs` membaca tag ekspresi, memecah naskah per emosi, menyisipkan jeda dengan durasi pasti, dan menggabungkan semuanya jadi satu file plus subtitle `.srt`. Ada tiga mode:
 
 | Mode | Kapan | Butuh |
 |---|---|---|
-| **Manual** (default) | User generate sendiri di Google AI Studio web. Gratis, bisa dengar dan ulang tiap take. | Node 18+, ffmpeg |
+| **Satu take** (default) | User menempel seluruh Script Voice Over + Style instructions dari naskah ke Google AI Studio sekaligus, lalu memberi satu file audio. Paling sedikit langkah untuk user. | Node 18+, ffmpeg; model whisper untuk subtitle presisi |
+| **Potongan** | User mau mengulang bagian tertentu saja, atau satu take terlalu panjang untuk AI Studio. | Node 18+, ffmpeg |
 | **Otomatis (API)** | User minta langsung jadi tanpa copy-paste, atau sudah punya `GEMINI_API_KEY` dan memintanya. | Node 18+, `GEMINI_API_KEY`, ffmpeg untuk mp3 |
 
-Pakai mode manual kecuali user meminta otomatis/API. Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/biaya, atau ingin memakai suaranya sendiri.
+Pakai mode satu take kecuali user meminta potongan atau API. Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/biaya, atau ingin memakai suaranya sendiri.
 
-## Mode manual (Google AI Studio, gratis)
+## Mode satu take (Google AI Studio, gratis)
+
+1. **User generate** di https://aistudio.google.com → **Generate Speech**: tempel isi bagian `## Style instructions` ke kolom Style instructions dan seluruh `## Script Voice Over` ke kolom teks, pilih suara (default `Enceladus`), Run, lalu download. Kalau user bertanya caranya, jelaskan ini; tidak perlu menyalin naskahnya ke chat karena sudah ada di file `.md`.
+2. **Rapikan + subtitle** dengan satu perintah:
+   ```bash
+   node "<skill>/scripts/tts.mjs" align naskah.md take.wav [--out <slug>.vo.wav]
+   ```
+   Hasil default: `<slug>.vo.wav` + `<slug>.vo.srt` di folder take (nama dari naskah). Take asli tidak ditimpa. Hening di awal/akhir dipotong dan volume diseragamkan seperti `stitch`. Untuk subtitle, whisper (filter ffmpeg) mendengarkan audio, tiap baris naskah dicocokkan dengan kata yang tertangkap, lalu batas baris ditempel ke jeda hening terdekat. Teks subtitle selalu dari naskah, bukan dari whisper.
+3. **Laporkan** path audio dan SRT, durasi, dan baris `Timing:` dari output (berapa awal baris yang terkunci whisper). Sebutkan bahwa SRT bisa diedit tangan kalau ada baris yang terasa meleset.
+
+**Model whisper.** Default `~/whisper-models/ggml-base.bin` (atau `--whisper-model`, atau env `WHISPER_MODEL`); butuh ffmpeg yang punya filter `whisper` (`ffmpeg -filters | findstr whisper`). Kalau model belum ada, `align` tetap jalan dengan perkiraan dari panjang teks dan jeda, dan mencetak peringatan. Untuk subtitle presisi, **minta izin user dulu** sebelum mengunduh `ggml-base.bin` (±148 MB) dari `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin` ke `~/whisper-models/`.
+
+Batas: whisper base sering salah dengar suara berbisik, jadi kata yang sangat pendek ("Dua.", "Sepi.") kadang tidak terkunci dan memakai perkiraan, yang bisa meleset ±1–2 detik. Kalau user butuh setiap baris pasti, pakai mode potongan.
+
+## Mode potongan (Google AI Studio, gratis)
 
 1. **Ambil naskah** sama seperti mode otomatis (langkah 1 di bawah).
 2. **Siapkan potongan:**
@@ -49,7 +64,7 @@ Pakai mode manual kecuali user meminta otomatis/API. Baca `references/suara-gemi
 
 ### Alur kerja
 
-1. **Ambil naskah** (berlaku juga untuk mode manual).
+1. **Ambil naskah** (berlaku juga untuk mode satu take dan potongan).
    - User memberi path `.md` hasil skill `script` → pakai langsung. Skrip otomatis mengambil bagian `## Script Voice Over` dan `## Style instructions`.
    - User menempel teks VO di chat → simpan apa adanya ke `<slug>.vo.md` di folder kerja (slug dari kalimat pertama, huruf kecil bertanda hubung). Kalau user juga memberi style instructions, simpan dalam format:
      ```markdown

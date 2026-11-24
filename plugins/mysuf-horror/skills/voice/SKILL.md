@@ -1,15 +1,41 @@
 ---
 name: voice
-description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) memakai Gemini TTS — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script, lalu skill ini me-render suaranya per baris dengan emosi, jeda, dan suara napas, siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini atau suara user sendiri (voice replication, Gemini API paid tier). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
+description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script. Mode manual (default, gratis tanpa API key) memecah naskah jadi potongan siap tempel ke Google AI Studio Generate Speech lalu menggabungkan file hasil download jadi satu narasi dengan jeda pas, volume seragam, dan subtitle .srt; mode otomatis me-render langsung lewat Gemini API. Hasilnya siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini atau suara user sendiri (voice replication, Gemini API paid tier). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
 ---
 
 # voice (mysuf-horror)
 
-Naskah VO masuk, file audio narasi keluar. User tidak perlu membuka Google AI Studio atau menyalin per baris: skrip `scripts/tts.mjs` membaca tag ekspresi, memecah naskah per emosi, memanggil Gemini TTS, menyisipkan jeda dengan durasi pasti, lalu menggabungkan semuanya jadi satu file.
+Naskah VO masuk, file audio narasi keluar. Skrip `scripts/tts.mjs` membaca tag ekspresi, memecah naskah per emosi, menyisipkan jeda dengan durasi pasti, dan menggabungkan semuanya jadi satu file plus subtitle `.srt`. Ada dua mode:
 
-Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/biaya, atau ingin memakai suaranya sendiri.
+| Mode | Kapan | Butuh |
+|---|---|---|
+| **Manual** (default) | User generate sendiri di Google AI Studio web. Gratis, bisa dengar dan ulang tiap take. | Node 18+, ffmpeg |
+| **Otomatis (API)** | User minta langsung jadi tanpa copy-paste, atau sudah punya `GEMINI_API_KEY` dan memintanya. | Node 18+, `GEMINI_API_KEY`, ffmpeg untuk mp3 |
 
-## Syarat (cek sekali)
+Pakai mode manual kecuali user meminta otomatis/API. Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/biaya, atau ingin memakai suaranya sendiri.
+
+## Mode manual (Google AI Studio, gratis)
+
+1. **Ambil naskah** sama seperti mode otomatis (langkah 1 di bawah).
+2. **Siapkan potongan:**
+   ```bash
+   node "<skill>/scripts/tts.mjs" prep naskah.md --voice Enceladus
+   ```
+   Hasilnya folder `<naskah>-vo/` berisi `potongan.md` (petunjuk + potongan siap tempel) dan `rencana.json` (urutan, jeda, teks untuk subtitle). Naskah dipecah di jeda sedang/panjang dan maksimal ±45 kata per potongan, jadi naskah 60 detik biasanya 3–5 potongan. Tag emosi pindah ke Style instructions tiap potongan (termasuk di kalimat mana emosinya berganti), dan teks hanya menyisakan tag yang dipahami AI Studio.
+3. **Tampilkan potongan ke user di chat** — isi `potongan.md` apa adanya (Style instructions dan Teks dalam blok kode supaya gampang disalin), plus nama file yang harus dipakai saat menyimpan (`01.wav`, `02.wav`, ...) dan path foldernya. User mungkin membuka sesi dari HP, jadi jangan hanya menyebut path file.
+4. **Tunggu user** generate dan download semua potongan ke folder itu. Nama boleh `01.wav`, `01 take2.mp3`, dst. — yang penting diawali nomor potongan. Kalau user menyimpan di tempat lain (mis. Downloads dengan nama acak), berikan path-nya berurutan ke perintah stitch.
+5. **Gabungkan:**
+   ```bash
+   node "<skill>/scripts/tts.mjs" stitch "<naskah>-vo" [--out narasi.mp3]
+   # atau dengan file eksplisit, berurutan:
+   node "<skill>/scripts/tts.mjs" stitch "<naskah>-vo" "C:/Users/.../Downloads/a.wav" "C:/Users/.../Downloads/b.wav" ...
+   ```
+   Tiap take: hening di awal/akhir dipotong, volume diseragamkan (loudnorm per take), lalu disambung dengan jeda dari naskah (`--gap 0.4` untuk sambungan tanpa tag jeda). Format apa pun yang dibaca ffmpeg diterima (wav, mp3, m4a, ogg). Hasil default `<folder>/narasi.mp3` + `narasi.srt`.
+6. **Laporkan** path audio dan SRT serta durasinya. Kalau satu potongan kurang pas, user cukup generate ulang potongan itu, timpa filenya, lalu jalankan stitch lagi.
+
+## Mode otomatis (Gemini API)
+
+### Syarat (cek sekali)
 
 - **Node.js 18+**. Tidak ada `npm install`; skrip hanya memakai modul bawaan Node.
 - **ffmpeg** di PATH, hanya untuk output `.mp3` dan untuk perintah `clone`. Output `.wav` jalan tanpa ffmpeg.
@@ -21,9 +47,9 @@ Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/
      ```
   Langganan aplikasi Gemini (Gemini Pro / Google AI Pro) **terpisah** dari Gemini API — langganan itu tidak memberi API key, tapi key gratis dari AI Studio sudah cukup untuk suara bawaan.
 
-## Alur kerja
+### Alur kerja
 
-1. **Ambil naskah.**
+1. **Ambil naskah** (berlaku juga untuk mode manual).
    - User memberi path `.md` hasil skill `script` → pakai langsung. Skrip otomatis mengambil bagian `## Script Voice Over` dan `## Style instructions`.
    - User menempel teks VO di chat → simpan apa adanya ke `<slug>.vo.md` di folder kerja (slug dari kalimat pertama, huruf kecil bertanda hubung). Kalau user juga memberi style instructions, simpan dalam format:
      ```markdown

@@ -1,9 +1,9 @@
 ---
 name: script
-description: Menulis naskah horor pendek berbahasa Indonesia untuk TikTok, Reels, dan YouTube Shorts (30–90 detik) — voice-over per beat dengan timestamp, teks layar, arahan visual/B-roll, cue SFX, 3 alternatif hook, Script Voice Over bertag ekspresi siap tempel ke Google AI Studio TTS (Generate Speech) beserta Style instructions-nya, plus caption dan hashtag — bertema horor lokal (kuntilanak, pocong, genderuwo, santet, kos-kosan, KKN, desa, jalan sepi, mitos daerah). Hasilnya file .md siap rekam. Gunakan skill ini setiap kali user minta naskah, script, cerita, atau ide konten horor/seram/misteri/urban legend/kisah mistis untuk video pendek atau konten sosmed, walaupun tidak menyebut "naskah" secara eksplisit (mis. "bikinin cerita pocong buat tiktok", "ide konten seram 1 menit"). Kalau user minta videonya langsung di-render jadi animasi MP4, pakai skill anim dari plugin mysuf-horror (naskah dari skill ini bisa jadi bahannya).
+description: Menulis naskah horor pendek berbahasa Indonesia untuk TikTok, Reels, dan YouTube Shorts (30–90 detik) — voice-over per beat dengan timestamp, teks layar, arahan visual/B-roll, cue SFX, 3 alternatif hook, Script Voice Over bertag ekspresi siap tempel ke Google AI Studio TTS (Generate Speech) beserta Style instructions-nya, plus caption dan hashtag — bertema horor lokal (kuntilanak, pocong, genderuwo, santet, kos-kosan, KKN, desa, jalan sepi, mitos daerah). Hasilnya file .md siap rekam. Gunakan skill ini setiap kali user minta naskah, script, cerita, atau ide konten horor/seram/misteri/urban legend/kisah mistis untuk video pendek atau konten sosmed, walaupun tidak menyebut "naskah" secara eksplisit (mis. "bikinin cerita pocong buat tiktok", "ide konten seram 1 menit"). Kalau user minta videonya langsung di-render jadi animasi MP4, pakai skill anim dari plugin kontenkit (naskah dari skill ini bisa jadi bahannya).
 ---
 
-# script (mysuf-horror)
+# script (kontenkit)
 
 Menulis naskah horor pendek yang siap direkam: orang bisa langsung membacanya sebagai voice-over, editor tahu visual dan suara apa yang dipasang di tiap detik, dan penonton tidak scroll di 2 detik pertama.
 
@@ -42,7 +42,7 @@ Skala proporsional untuk durasi lain (30 dtk: gabungkan setup+kejanggalan; 90 dt
 
 ## Format file (wajib ikuti)
 
-Format tetap ini dipakai karena editor dan pengisi suara membaca kolom yang sama setiap kali, dan skill `anim` (mysuf-horror) bisa memakai kolom **Teks layar** langsung sebagai teks scene.
+Format tetap ini dipakai karena editor dan pengisi suara membaca kolom yang sama setiap kali, dan skill `anim` (kontenkit) bisa memakai kolom **Teks layar** langsung sebagai teks scene.
 
 ```markdown
 # [Judul — maks 6 kata, bikin penasaran]
@@ -141,4 +141,4 @@ Seram lewat suasana, bukan sadis: tanpa gore/darah eksplisit, tanpa bunuh diri a
 
 ## Lanjut ke video
 
-Kalau user ingin naskah ini jadi animasi, tawarkan skill `anim` (mysuf-horror): kolom Teks layar → teks scene (maks ±14 kata, sudah bertanda `*bintang*`), kolom Visual → pilihan latar/karakter, dan audio hasil Script Voice Over bisa dipasang dengan `--voice narasi.mp3` (atau .wav). Audio itu bisa dibuat otomatis dari file naskah ini dengan skill `voice` (mysuf-horror), tanpa menyalin manual ke Google AI Studio.
+Kalau user ingin naskah ini jadi animasi, tawarkan skill `anim` (kontenkit): kolom Teks layar → teks scene (maks ±14 kata, sudah bertanda `*bintang*`), kolom Visual → pilihan latar/karakter, dan audio hasil Script Voice Over bisa dipasang dengan `--voice narasi.mp3` (atau .wav). Audio itu bisa dibuat otomatis dari file naskah ini dengan skill `voice` (kontenkit), tanpa menyalin manual ke Google AI Studio.

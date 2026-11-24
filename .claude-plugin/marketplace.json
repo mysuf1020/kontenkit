@@ -1,5 +1,5 @@
 {
-  "name": "mysuf-horror",
+  "name": "kontenkit",
   "description": "Skill Claude Code untuk konten horor pendek berbahasa Indonesia.",
   "owner": {
     "name": "mysuf1020",
@@ -7,8 +7,8 @@
   },
   "plugins": [
     {
-      "name": "mysuf-horror",
-      "source": "./plugins/mysuf-horror",
+      "name": "kontenkit",
+      "source": "./plugins/kontenkit",
       "description": "Naskah horor TikTok/Reels/Shorts siap TTS Google AI Studio, plus render voice-over Gemini TTS dan animasi horor siluet 9:16 ke MP4."
     }
   ]

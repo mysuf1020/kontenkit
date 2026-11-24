@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Voice-over generator for mysuf-horror: turns a tagged VO script into one audio file
+// Voice-over generator for kontenkit: turns a tagged VO script into one audio file
 // using the Gemini TTS Interactions API. No npm dependencies (Node 18+ fetch).
 //
 //   node tts.mjs <naskah.md|.txt> [--out narasi.wav|.mp3] [--voice Enceladus|voice_...]

@@ -3,7 +3,7 @@ name: anim
 description: Bikin video animasi horor pendek 9:16 berbahasa Indonesia (45–75 detik) bergaya siluet sinematik — karakter siluet hitam beraksen warna, latar malam (hutan, rumah tua, kuburan, lorong, kamar, jalan), kabut, petir, hantu (kuntilanak, pocong, sosok bayangan, mata menyala), teks narasi muncul per kata, jumpscare, dan suara horor sintetis — lalu di-render jadi MP4 siap upload Reels/TikTok/Shorts. Use when the user asks for a horror / creepy / misteri / urban legend / cerita seram / kisah hantu animated video, short, reel, or TikTok, or wants to turn a horror story into an animation.
 ---
 
-# anim (mysuf-horror)
+# anim (kontenkit)
 
 Mengubah ide cerita horor menjadi video MP4 9:16 lewat tiga tahap: **naskah → file story → render**.
 Engine menggambar semuanya dengan kode (canvas di Chrome headless), jadi tidak perlu aset gambar.

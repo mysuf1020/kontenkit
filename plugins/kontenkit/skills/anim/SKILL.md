@@ -1,6 +1,6 @@
 ---
 name: anim
-description: Bikin video animasi horor pendek 9:16 berbahasa Indonesia (45–75 detik) bergaya siluet sinematik — karakter siluet hitam beraksen warna, latar malam (hutan, rumah tua, kuburan, lorong, kamar, jalan), kabut, petir, hantu (kuntilanak, pocong, sosok bayangan, mata menyala), teks narasi muncul per kata, jumpscare, dan suara horor sintetis — lalu di-render jadi MP4 siap upload Reels/TikTok/Shorts. Use when the user asks for a horror / creepy / misteri / urban legend / cerita seram / kisah hantu animated video, short, reel, or TikTok, or wants to turn a horror story into an animation.
+description: Bikin video animasi horor pendek 9:16 berbahasa Indonesia (±90 detik, mengikuti VO) bergaya ilustrasi sinematik — karakter berwarna dengan wajah jelas (sopir truk, kakek, nenek, ibu, bayi, anjing), latar malam (hutan, rumah tua, kuburan, lorong, kamar, jalan, sungai Kalimantan, rumah panggung, kabin truk, gang kampung, sawah, kebun bambu, sumur tua), color grade horor, kabut, petir, hantu (kuntilanak, pocong, kuyang, palasik, leak, wewe gombel, begu ganjang, welthok, sosok bayangan, mata menyala), teks narasi muncul per kata, jumpscare, dan suara horor sintetis — lalu di-render jadi MP4 siap upload Reels/TikTok/Shorts. Use when the user asks for a horror / creepy / misteri / urban legend / cerita seram / kisah hantu animated video, short, reel, or TikTok, or wants to turn a horror story into an animation.
 ---
 
 # anim (kontenkit)
@@ -26,7 +26,7 @@ Kalau `scripts/node_modules` belum ada: `cd <skill-dir>/scripts && npm install`.
 
 ## Alur kerja
 
-1. **Pahami permintaan.** Topik/legenda, durasi (default ±55 detik), handle untuk watermark, warna aksen. Kalau user hanya memberi tema ("bikin video horor tentang pocong"), langsung karang ceritanya — jangan bertanya berlebihan.
+1. **Pahami permintaan.** Topik/legenda, durasi (ikut audio VO; standar naskah sekarang minimal 90 detik), handle untuk watermark, warna aksen. Kalau user hanya memberi tema ("bikin video horor tentang pocong"), langsung karang ceritanya — jangan bertanya berlebihan.
 2. **Tulis naskah dulu** mengikuti `references/horror-writing.md`: 7–10 scene, satu kalimat pendek per scene. Tampilkan naskahnya ke user secara ringkas (daftar scene + teks) lalu lanjut — tidak perlu menunggu persetujuan kecuali user minta.
 3. **Tulis file story** `<folder-kerja>/<slug>.js` (bentuk `window.STORY = {...}`) sesuai `references/story-schema.md`. Pilih latar/karakter/efek yang mendukung tiap kalimat.
 4. **Cek visual dengan stills** sebelum render penuh:

@@ -9,7 +9,7 @@ window.STORY = {
   accent: '#c4161c',         // warna aksen: kata *penting*, aksesoris karakter, garis judul
   tone: 'blue',              // tone default semua scene
   grain: 0.07,               // intensitas film grain (0–0.15)
-  grade: true,               // color grade horor (agak pudar, dingin, vignette pekat); false = warna asli. Bisa juga per scene.
+  grade: true,               // color grade horor (pudar, dingin, vignette pekat) — hanya di scene horor; false = matikan.
   scenes: [ /* scene... */ ],
 };
 ```
@@ -22,8 +22,9 @@ Hanya data (tanpa fungsi). Koordinat memakai kanvas logis **1080 × 1920**. `x` 
 |---|---|---|
 | `dur` | detik | **wajib**. Panjang scene. |
 | `bg` | string | Latar (lihat tabel). Default `black`. |
-| `tone` | string | `blue` (malam), `green` (mistis/kuburan), `red` (bahaya), `purple` (gaib), `amber` (lampu jalan/senja). |
-| `moon` | bool | `false` untuk menyembunyikan bulan di latar luar ruangan. |
+| `tone` | string | `blue` (malam), `green` (mistis/kuburan), `red` (bahaya — lebih baik biarkan cahaya hantu yang memerahkan), `purple` (gaib), `amber` (lampu jalan/senja), `dawn` (fajar: langit pink-biru, lega setelah teror). |
+| `horror` | bool | Scene horor = color grade horor + vignette pekat. Otomatis `true` kalau scene memuat hantu (`ghost`, `pocong`, `kuyang`, `leak`, `wewe`, `begu`, `welthok`, `hand`, `hair`, `shadow`, `eyes`, dll.), `scare`, `tone: 'red'` atau `heartbeat`. Manusia selalu digambar natural; isi `true` untuk scene tanpa hantu yang tetap harus mencekam (mis. bukti yang tertinggal). |
+| `moon` | bool | `{x, y, r}` | `false` menyembunyikan bulan; objek memindah/mengubah ukurannya (default 790, 360, r 64). Variasikan antar scene supaya tidak berulang. |
 | `seed` | angka | Ganti untuk variasi susunan pohon/nisan pada latar yang sama. |
 | `caption` | string | Teks narasi, muncul per kata. `*kata*` atau `*beberapa kata*` = warna aksen. Disembunyikan saat video memakai subtitle VO (`.srt`), kecuali render diberi `--keep-captions`. |
 | `captionPos` | `bottom` \| `center` \| `top` | Default `bottom`. Pakai `center` di latar `black`. |
@@ -68,7 +69,7 @@ Hanya data (tanpa fungsi). Koordinat memakai kanvas logis **1080 × 1920**. `x` 
 | `sumur` | halaman belakang: sumur tua bata berlumut dengan atap kayu, tali dan ember, pohon pisang, jemuran, dinding belakang rumah (kaki di `y` ±1350) | sumur angker, kuntilanak pohon pisang, anak tenggelam |
 | `bedengroom` | dalam bedeng: dinding papan vertikal, jendela kayu terbuka ke sungai malam (kotak jendela sama dengan `room`: 600,450,300,400), pelita di rak, kain tergantung di tali | kamar bayi, rumah kampung, adegan dalam rumah kayu |
 
-Field khusus `river`: `houses` (0–3, default 3), `litWindow` (jendela rumah ke-n menyala, pantulannya bergoyang di air; `-1` = semua gelap), `boardwalk: false` (tanpa titian depan). Field `bedeng`: `litWindow` (0 = jendela menyala, `-1` = gelap). `truck`: `roadMove: false` = truk berhenti. Contoh sopir: `{type:'person', look:'trucker', action:'drive', x: 0.5, y: 1570, size: 1.5, light: 'warm'}`.
+Field khusus `river`: `boat: false` (tanpa klotok tertambat), `houses` (0–3, default 3), `litWindow` (jendela rumah ke-n menyala, pantulannya bergoyang di air; `-1` = semua gelap), `boardwalk: false` (tanpa titian depan). Field `bedeng`: `litWindow` (0 = jendela menyala, `-1` = gelap). `truck`: `roadMove: false` = truk berhenti. Contoh sopir: `{type:'person', look:'trucker', action:'drive', x: 0.5, y: 1570, size: 1.5, light: 'warm'}`.
 
 Field khusus `angkot`: `passengers` (0–5 penumpang duduk, default 2), `passEvery` (sapuan lampu jalan; bayangan penumpang di lantai ikut bergerak — hantu tidak punya bayangan), `roadMove: false`, `brake: true`. Hantu "duduk di pojok belakang": `{type:'ghost', x: 0.3, y: 1235, size: 0.36}` (bangku kiri, bukan di ambang pintu).
 
@@ -115,7 +116,7 @@ Per tipe:
 - **bus** — bus malam tampak samping, menghadap kanan, roda di `y` (pakai ±1420 di latar `road`). Dengan `to` = melaju (roda berputar). `passenger` (0–7) = siluet penumpang di jendela ke-n. `dark: true` = lampu kabin & lampu depan mati.
 - **angkot** — angkot tampak samping menghadap kanan (biru, strip kuning, pintu geser terbuka), roda di `y` (±1420 di `road`). `to` = melaju, `color` = warna cat, `label` = kode trayek (default `T19`), `passenger` = siluet penumpang di jendela, `dark: true` = lampu mati.
 - **money** — uang kertas lama bernoda, digambar di tengah `(x, y)` (pakai `y` ±900). `value` (default `100`), `label` (`RUPIAH`), `year` (`TAHUN 1968`).
-- **kuyang** — kepala perempuan melayang (wajah pucat, mata merah menyala, rambut sebahu) dengan ekor cahaya bara merah di bawahnya, tanpa anatomi/gore. Titik asal = tengah kepala (default `y` 900). Jauh: `size` 0.3–0.5 + `blur`; dekat/klimaks: `size` ≥1. `eyes: false` mematikan mata menyala. Dengan `to` = terbang berpindah. Muncul di jendela: `clip` kotak jendela.
+- **kuyang** — kepala perempuan terpenggal yang terbang: wajah nyaris manusia (cokelat kehijauan, pipi cekung, seringai tipis), kepala miring, rambut basah berkibar ke belakang arah terbang, dan sulur merah gelap menjuntai di bawah dagu yang memancarkan cahaya merah (stilisasi, tanpa gore). Titik asal = tengah kepala (default `y` 900). Jauh: `size` 0.3–0.5 + `blur`; dekat/klimaks: `size` ≥1. `eyes: false` mematikan mata menyala. Dengan `to` = terbang berpindah. Muncul di jendela: `clip` kotak jendela.
 - **wewe** — wewe gombel: nenek raksasa bungkuk berkain lusuh, rambut uban sampai lutut, lengan panjang berkuku, mata cekung, seringai. Titik asal = kaki; ±800 px tinggi di `size` 1. `action: 'reach'` = tangan terulur, `still: true` = diam.
 - **leak** — kepala terbang khas Bali: mata melotot merah, taring, lidah merah panjang, rambut putih liar, api hijau pucat. Titik asal = tengah kepala (default `y` 900).
 - **begu** — begu ganjang: sosok hitam kurus luar biasa tinggi (±900 px) yang **terus memanjang** selama scene (`grow`, default 0.6 = +60%), dua titik mata pucat. `eyes: false` = tanpa mata. Tempatkan agak jauh (`y` 1350–1450).

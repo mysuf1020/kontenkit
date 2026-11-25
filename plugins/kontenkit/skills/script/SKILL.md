@@ -12,6 +12,7 @@ Video pendek hidup-mati di **retensi**. Setiap keputusan di bawah — hook di ka
 Baca sebelum menulis:
 - `references/teknik-horor.md` — pola hook, cara membangun ketegangan, bahan cerita lokal per daerah, klise yang perlu dihindari.
 - `references/tts-ai-studio.md` — daftar tag ekspresi `<...>` dan pilihan style untuk Google AI Studio TTS. Pakai hanya tag dari daftar ini; tag di luar daftar berisiko ikut terbaca sebagai teks.
+- `references/serial-antologi.md` — hanya kalau user minta serial/episode bernomor (mis. "Larangan Daerah #3") atau menyebut seri yang sudah punya file `<seri>-00-seri.md`: narator tetap, satu pantangan + satu sosok daerah per episode, durasi default 75–100 dtk, plus file peta seri.
 
 ## Alur kerja
 

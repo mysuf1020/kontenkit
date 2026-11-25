@@ -1493,7 +1493,8 @@
     let y = ch.y != null ? ch.y : (ch.type === 'eyes' || ch.type === 'banaspati') ? 900 : ch.type === 'hair' ? 0 : GY;
     let s = (ch.size || 1) * (ch.type === 'eyes' ? 1.8 : 1);
     if (ch.action === 'approach') { const q = ease(pw); s *= lerp(1, ch.grow || 1.8, q); y += lerp(0, ch.type === 'eyes' ? 120 : 280, q); }
-    const face = ch.face != null ? ch.face : (ch.to != null && X(ch.to) < X(ch.x) ? -1 : 1);
+    // Only a number is a facing direction; `hair` and `banaspati` use a boolean `face` to toggle their face.
+    const face = typeof ch.face === 'number' ? ch.face : (ch.to != null && X(ch.to) < X(ch.x) ? -1 : 1);
     // Passing streetlight in the bus throws a moving floor shadow — only for the living
     // (people), which is the point of scenes where the ghost casts none.
     if (sc.castShadows && ch.type === 'person') {

@@ -51,6 +51,7 @@
     red:    { top: '#070102', mid: '#2a0708', hor: '#661616', rim: 'rgba(245,120,110,0.7)',  fog: '220,160,150' },
     purple: { top: '#050309', mid: '#1a1030', hor: '#422a62', rim: 'rgba(195,165,245,0.7)',  fog: '200,190,230' },
     amber:  { top: '#070402', mid: '#24160a', hor: '#5a3b1b', rim: 'rgba(255,195,125,0.7)',  fog: '230,200,160' },
+    dawn:   { top: '#1d2a40', mid: '#7f97ad', hor: '#e9bfae', rim: 'rgba(255,225,200,0.6)',  fog: '235,225,220' },
   };
 
   // ---------- timeline ----------
@@ -70,6 +71,12 @@
   const toneOf = (sc) => TONES[sc.tone || S.tone || 'blue'] || TONES.blue;
 
   // ---------- backgrounds (static part cached per scene) ----------
+  // `moon`: false hides it; an object {x, y, r} places/sizes it (default 790,360 r 64).
+  function moonOf(sc) {
+    if (sc.moon === false) return false;
+    const m = typeof sc.moon === 'object' ? sc.moon : {};
+    return { x: m.x || 790, y: m.y || 360, r: m.r || 64 };
+  }
   function sky(c, T, moon, r, horizon) {
     const g = c.createLinearGradient(0, 0, 0, horizon);
     g.addColorStop(0, T.top); g.addColorStop(0.6, T.mid); g.addColorStop(1, T.hor);
@@ -77,13 +84,13 @@
     c.fillStyle = 'rgba(255,255,255,0.5)';
     for (let i = 0; i < 70; i++) { const x = r() * LW, y = r() * horizon * 0.6; c.fillRect(x, y, 2, 2); }
     if (moon) {
-      const mx = 790, my = 360;
+      const mx = moon.x || 790, my = moon.y || 360, mr = moon.r || 88;
       const gl = c.createRadialGradient(mx, my, 60, mx, my, 360);
       gl.addColorStop(0, 'rgba(235,230,210,0.35)'); gl.addColorStop(1, 'rgba(235,230,210,0)');
       c.fillStyle = gl; c.fillRect(0, 0, LW, horizon);
-      c.fillStyle = '#ebe6d2'; c.beginPath(); c.arc(mx, my, 88, 0, 7); c.fill();
+      c.fillStyle = '#ebe6d2'; c.beginPath(); c.arc(mx, my, mr, 0, 7); c.fill();
       c.fillStyle = 'rgba(0,0,0,0.08)';
-      for (let i = 0; i < 6; i++) { c.beginPath(); c.arc(mx - 40 + r() * 80, my - 40 + r() * 80, 8 + r() * 16, 0, 7); c.fill(); }
+      for (let i = 0; i < 6; i++) { c.beginPath(); c.arc(mx + (r() - 0.5) * mr, my + (r() - 0.5) * mr, (8 + r() * 16) * mr / 88, 0, 7); c.fill(); }
     }
     // thin cloud wisps
     c.fillStyle = 'rgba(0,0,0,0.35)';
@@ -112,7 +119,7 @@
     black(c) { c.fillStyle = '#000'; c.fillRect(0, 0, LW, LH); return {}; },
 
     forest(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1250);
+      sky(c, T, moonOf(sc), r, 1250);
       c.lineCap = 'round';
       c.strokeStyle = T.mid;
       for (let i = 0; i < 9; i++) tree(c, r, r() * LW, 1250, 170 + r() * 90, -Math.PI / 2 + (r() - 0.5) * 0.2, 16, 6);
@@ -129,7 +136,7 @@
     },
 
     house(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1270);
+      sky(c, T, moonOf(sc), r, 1270);
       ground(c, 1270);
       c.lineCap = 'round'; c.strokeStyle = '#010203';
       tree(c, r, 130, 1320, 270, -Math.PI / 2 - 0.08, 32, 6);
@@ -157,7 +164,7 @@
     },
 
     graveyard(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1200);
+      sky(c, T, moonOf(sc), r, 1200);
       ground(c, 1200);
       c.fillStyle = '#030406';
       c.beginPath(); c.moveTo(0, 1220);
@@ -254,7 +261,7 @@
     },
 
     road(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1050);
+      sky(c, T, moonOf(sc), r, 1050);
       ground(c, 1050);
       c.lineCap = 'round'; c.strokeStyle = '#010203';
       for (let i = 0; i < 7; i++) {
@@ -478,7 +485,7 @@
   function bgFor(sc) {
     const name = sc.bg || 'black';
     if (!BG[name]) throw new Error('unknown bg "' + name + '" in scene ' + sc.i);
-    const key = [name, sc.tone || S.tone || 'blue', sc.seed || 1, sc.moon !== false, sc.passengers, sc.routeSign, sc.houses, sc.boardwalk].join('|');
+    const key = [name, sc.tone || S.tone || 'blue', sc.seed || 1, JSON.stringify(sc.moon), sc.passengers, sc.routeSign, sc.houses, sc.boardwalk].join('|');
     if (!bgCache[key]) {
       const o = off(LW, LH);
       const meta = BG[name](o.x, rng((sc.seed || 1) * 977 + name.length * 31), toneOf(sc), sc) || {};
@@ -1501,7 +1508,7 @@
     // deep eye sockets and dark under-eyes: tired, sleepless, unsettling
     [-1, 1].forEach((s) => {
       const og = c.createRadialGradient(hx + s * 18, hy - 6, 3, hx + s * 18, hy - 4, 22);
-      og.addColorStop(0, 'rgba(30,12,8,0.45)'); og.addColorStop(1, 'rgba(30,12,8,0)');
+      og.addColorStop(0, 'rgba(30,12,8,' + (mood === 'scared' ? 0.4 : 0.2) + ')'); og.addColorStop(1, 'rgba(30,12,8,0)');
       c.fillStyle = og; c.beginPath(); c.ellipse(hx + s * 18, hy - 4, 22, 16, 0, 0, 7); c.fill();
     });
     c.fillStyle = 'rgba(60,28,18,0.18)'; c.beginPath(); c.ellipse(hx, hy + 52, 18, 7, 0, 0, 7); c.fill();
@@ -1525,7 +1532,7 @@
     });
     // eyes (blink every few seconds)
     const blink = ((lt + seed * 0.37) % 3.9) < 0.12;
-    const wide = mood === 'scared' || mood === 'shout' ? 1.4 : 1;
+    const wide = mood === 'scared' ? 1.2 : mood === 'shout' ? 1.05 : 1;
     [-1, 1].forEach((s) => {
       const ex = hx + s * 18, ey = hy - 6;
       if (mood === 'laugh' || mood === 'sleep' || blink) {
@@ -1535,17 +1542,18 @@
         else { c.moveTo(ex - 10, ey); c.quadraticCurveTo(ex, ey + 4, ex + 10, ey); }
         c.stroke();
       } else {
-        const ry = 6.3 * wide;
-        c.fillStyle = '#ebe5da'; c.beginPath(); c.ellipse(ex, ey, 11, ry, 0, 0, 7); c.fill();
-        c.save(); c.beginPath(); c.ellipse(ex, ey, 11, ry, 0, 0, 7); c.clip();
+        const ry = 5.2 * wide;
+        const almond = () => { c.beginPath(); c.moveTo(ex - 11, ey + 1); c.quadraticCurveTo(ex - 2, ey - ry * 1.5, ex + 11, ey - 0.5); c.quadraticCurveTo(ex + 1, ey + ry * 1.25, ex - 11, ey + 1); c.closePath(); };
+        c.fillStyle = '#e3d8c6'; almond(); c.fill();
+        c.save(); almond(); c.clip();
         const ir = mood === 'scared' ? 4.3 : 5.8, dx = look * 3;
         dot(c, ex + dx, ey, ir, '#1d0f08'); dot(c, ex + dx, ey, ir * 0.78, '#3b2315'); dot(c, ex + dx, ey, ir * 0.45, '#050202');
-        c.fillStyle = 'rgba(120,40,30,0.18)'; c.fillRect(ex - 11, ey + ry * 0.3, 22, ry);   // bloodshot lower white
+        if (mood === 'scared') { c.fillStyle = 'rgba(120,40,30,0.15)'; c.fillRect(ex - 11, ey + ry * 0.3, 22, ry); }
         c.fillStyle = 'rgba(40,20,10,0.35)'; c.fillRect(ex - 12, ey - ry, 24, ry * 0.55);   // lid shadow
         c.restore();
         dot(c, ex + dx + 1.8, ey - 1.8, 1.6, 'rgba(255,255,255,0.92)');
         c.strokeStyle = '#1c0e08'; c.lineWidth = 2.8;
-        c.beginPath(); c.ellipse(ex, ey, 11.6, ry + 0.6, 0, Math.PI * 1.03, Math.PI * 1.97); c.stroke();
+        c.beginPath(); c.moveTo(ex - 12, ey + 1); c.quadraticCurveTo(ex - 2, ey - ry * 1.6, ex + 12, ey - 0.5); c.stroke();
         if (P.lashes) { c.lineWidth = 1.6; for (let i = 0; i < 4; i++) { const a = Math.PI * (1.15 + i * 0.22); c.beginPath(); c.moveTo(ex + Math.cos(a) * 11.6, ey + Math.sin(a) * (ry + 0.6)); c.lineTo(ex + Math.cos(a) * 15, ey + Math.sin(a) * (ry + 4)); c.stroke(); } }
       }
       if (P.old) {
@@ -1570,7 +1578,7 @@
     // mouth
     const my = hy + 35, lip = '#6b3326';
     if (mood === 'scared') {
-      c.fillStyle = '#1a0705'; c.beginPath(); c.ellipse(hx, my + 3, 7.5, 10, 0, 0, 7); c.fill();
+      c.fillStyle = '#2a0c08'; c.beginPath(); c.ellipse(hx, my + 3, 6, 6.5, 0, 0, 7); c.fill();
       c.strokeStyle = lip; c.lineWidth = 2.6; c.stroke();
     } else if (mood === 'shout') {
       c.fillStyle = '#1a0705'; c.beginPath(); c.ellipse(hx, my + 5, 14, 17, 0, 0, 7); c.fill();
@@ -1711,6 +1719,7 @@
     const bob = moving ? -Math.abs(Math.sin(ph)) * (act === 'run' ? 16 : 8) : Math.sin(lt * 2) * 2.5;
     c.translate(0, bob);
     if (act === 'tremble') c.translate((k.R() - 0.5) * 6, 0);
+    if (moving && act === 'run') c.rotate(0.16);
     const seated = act === 'drive' || ch.seated;
     const hx = act === 'look' ? Math.sin(lt * 1.4) * 8 : 0, hy = -476;
     const seed = Math.round(X(ch.x) * 7 + (ch.look || 'm').length * 13);
@@ -1811,7 +1820,7 @@
     const br = Math.sin(lt * 1.8) * 0.03;
     let L = [-0.13 - br, -0.06], R = [0.13 + br, 0.06];
     if (moving) { L = [-0.08 + sw, -0.12 + sw * 0.7]; R = [0.08 - sw, 0.12 - sw * 0.7]; }
-    if (moving && act === 'run') { L = [-0.15 + sw * 0.8, 1.5 + sw * 0.6]; R = [0.15 - sw * 0.8, -1.5 - sw * 0.6]; }
+    if (moving && act === 'run') { L = [-0.3 + sw * 0.8, -1.1 + sw * 0.6]; R = [0.3 - sw * 0.8, 1.1 - sw * 0.6]; }
     if (act === 'tremble' || act === 'cover') { L = [-0.25, 2.55]; R = [0.25, -2.55]; }
     if (act === 'reach') R = [2.25 + Math.sin(lt * 2) * 0.05, 2.75];
     if (act === 'point') R = [1.5, 1.55];
@@ -1919,7 +1928,10 @@
     const br = Math.sin(lt * 2.2) * 2;
     const sit = ch.pose === 'sit';
     c.strokeStyle = col; c.lineWidth = 15; c.lineCap = 'round';
-    c.beginPath(); c.moveTo(-110, sit ? -30 : -45); c.quadraticCurveTo(-175, -60, -150 + Math.sin(lt * 1.5) * 6, -110); c.stroke();
+    c.beginPath(); c.moveTo(-110, sit ? -30 : -45);
+    if (ch.ears === 'back') c.quadraticCurveTo(-150, -20, -95, -12);       // tail tucked under: afraid
+    else c.quadraticCurveTo(-175, -60, -150 + Math.sin(lt * 1.5) * 6, -110);
+    c.stroke();
     if (sit) {
       c.fillStyle = dk; c.beginPath(); c.ellipse(-50, -45, 60, 45, 0, 0, 7); c.fill();
       const g = c.createLinearGradient(0, -230, 0, -20); g.addColorStop(0, col); g.addColorStop(1, light);
@@ -1947,85 +1959,88 @@
     dot(c, hx + 14, hy - 6, 7, '#1a0f08');
     if (ch.shine !== false) {
       c.globalCompositeOperation = 'lighter';
-      glowRadial(c, hx + 14, hy - 6, 1, 22, '170,255,190', 0.55);
+      glowRadial(c, hx + 14, hy - 6, 1, 18, '255,190,90', 0.35);
       c.globalCompositeOperation = 'source-over';
-      dot(c, hx + 15, hy - 7, 2.5, 'rgba(220,255,225,0.95)');
+      dot(c, hx + 15, hy - 7, 2.2, 'rgba(255,235,200,0.9)');
     }
     c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 2;
     const fr = rng(31);
     for (let i = 0; i < 40; i++) { const x = (fr() - 0.5) * 220, y = -60 + (fr() - 0.5) * 50; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 8, y + 6); c.stroke(); }
   }
 
-  // Kuyang: a woman's floating head with long hair; below it only a glowing ember trail.
-  // Origin = center of the head. `eyes: false` hides the glowing eyes.
+  // Kuyang: a woman's severed, flying head — almost human (brown skin gone grey-green, a
+  // faint grin), wet hair whipping sideways, and beneath the jaw dark-red dangling tendrils
+  // that give off the red glow (stylized, no anatomy). Origin = center of the head.
+  // `variant: 'palasik'` (Minang) swaps the red for a cold green. `eyes: false` hides the eye glint.
   function kuyang(c, ch, k) {
     const { lt } = k;
-    const pulse = 0.8 + 0.2 * Math.sin(lt * 6.3) * Math.sin(lt * 2.1);
-    // `variant: 'palasik'` (Minang): same floating head, cold green glow instead of embers
     const pal = ch.variant === 'palasik';
-    const GL = pal ? '60,200,110' : '220,40,20', TR0 = pal ? '170,255,190' : '255,180,100', TR1 = pal ? '40,200,90' : '255,70,30';
+    const GL = pal ? '60,200,110' : '255,58,26', CORE = pal ? '190,255,200' : '255,150,80';
+    const T1 = pal ? '#0d3a1a' : '#5a0d0d', T2 = pal ? '#2f8a4a' : '#b3161b';
+    const pulse = 0.8 + 0.2 * Math.sin(lt * 6.3) * Math.sin(lt * 2.1);
+    const dir = 1;   // drawChar already mirrors the figure for leftward flight
     c.translate(0, Math.sin(lt * 1.7) * 14);
-    c.rotate(Math.sin(lt * 0.9) * 0.06);
-    // hair streaming behind the head, shoulder length so the glow below stays visible
-    const hs = Math.sin(lt * 1.3) * 14;
-    c.fillStyle = '#050303';
-    c.beginPath(); c.moveTo(-50, -40);
-    c.bezierCurveTo(-92, 40, -78 + hs, 130, -46 + hs, 190);
-    c.lineTo(46 + hs, 196); c.bezierCurveTo(78 + hs, 130, 92, 40, 50, -40); c.closePath(); c.fill();
-    c.strokeStyle = '#050303'; c.lineCap = 'round';
-    const hr = rng(77);
-    for (let i = 0; i < 26; i++) {
-      const x0 = (hr() - 0.5) * 100, end = 160 + hr() * 110;
-      c.lineWidth = 2 + hr() * 5;
-      c.beginPath(); c.moveTo(x0, 0); c.bezierCurveTo(x0 * 1.6, end * 0.4, x0 * 1.3 + hs, end * 0.75, x0 + hs * 1.6, end); c.stroke();
-    }
-    c.strokeStyle = 'rgba(150,170,180,0.18)'; c.lineWidth = 2;
-    for (let i = 0; i < 6; i++) { c.beginPath(); c.moveTo(-40 + i * 16, 20); c.quadraticCurveTo(-50 + i * 18 + hs, 110, -30 + i * 14 + hs * 1.4, 190); c.stroke(); }
+    // light comes from the tendrils, not the face
     c.globalCompositeOperation = 'screen';
-    glowRadial(c, 0, 80, 30, 520, GL, 0.45 * pulse);
+    glowRadial(c, 0, 120, 30, 560, GL, 0.5 * pulse);
     c.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 12; i++) {
-      const y = 80 + i * 36, r = 50 - i * 3.4 + Math.sin(lt * 8 + i) * 3, x = Math.sin(lt * 3 + i * 0.7) * 5 * i;
-      const g = c.createRadialGradient(x, y, 2, x, y, r * 1.3);
-      g.addColorStop(0, 'rgba(' + TR0 + ',' + 0.8 * (1 - i / 12) * pulse + ')'); g.addColorStop(0.5, 'rgba(' + TR1 + ',' + 0.45 * (1 - i / 12) * pulse + ')'); g.addColorStop(1, 'rgba(200,30,10,0)');
-      c.fillStyle = g; c.beginPath(); c.ellipse(x, y, r * 1.3, r * 1.5, 0, 0, 7); c.fill();
-    }
-    for (let i = 0; i < 18; i++) {
+    glowRadial(c, 0, 110, 4, 120, CORE, 0.5 * pulse);
+    for (let i = 0; i < 16; i++) {
       const r = rng(i * 17 + 3), life = (lt * (0.5 + r() * 0.5) + r()) % 1;
-      dot(c, (r() - 0.5) * 70 + Math.sin(lt * 2 + i) * 10, 120 + life * 360, 2.5 + r() * 2, 'rgba(255,140,60,' + (1 - life) * 0.8 + ')');
+      dot(c, (r() - 0.5) * 70 - dir * life * 60, 140 + life * 300, 2 + r() * 2, 'rgba(' + CORE + ',' + (1 - life) * 0.7 + ')');
     }
     c.globalCompositeOperation = 'source-over';
-    // face
-    const g = c.createRadialGradient(-12, -20, 6, 0, 0, 74);
-    g.addColorStop(0, '#e6dfd2'); g.addColorStop(0.6, '#bfbcae'); g.addColorStop(1, '#6e786c');
-    c.fillStyle = g; headPath(c, 0, 0, 0.95, 0.98); c.fill();
-    c.fillStyle = 'rgba(30,40,35,0.3)';
-    c.beginPath(); c.ellipse(-30, 22, 10, 20, 0.3, 0, 7); c.ellipse(30, 22, 10, 20, -0.3, 0, 7); c.fill();
-    c.fillStyle = 'rgba(20,10,10,0.55)';
-    c.beginPath(); c.ellipse(-18, -6, 15, 11, 0, 0, 7); c.ellipse(18, -6, 15, 11, 0, 0, 7); c.fill();
-    c.strokeStyle = '#1a1210'; c.lineWidth = 3.5;
-    [-1, 1].forEach((s) => { c.beginPath(); c.moveTo(s * 8, -24); c.quadraticCurveTo(s * 20, -30, s * 31, -22); c.stroke(); });
-    if (ch.eyes !== false) {
-      c.globalCompositeOperation = 'lighter';
-      [-1, 1].forEach((s) => glowRadial(c, s * 18, -6, 1, 34, '255,40,20', 0.7 * pulse));
-      c.globalCompositeOperation = 'source-over';
-      [-1, 1].forEach((s) => { c.fillStyle = '#e8e0d0'; c.beginPath(); c.ellipse(s * 18, -6, 10, 5.5, 0, 0, 7); c.fill(); dot(c, s * 18, -6, 4.8, '#ff2a14'); dot(c, s * 18, -6, 1.8, '#200000'); });
+    // dangling tendrils under the jaw, swaying and trailing behind the motion
+    for (let i = 0; i < 6; i++) {
+      const x0 = -24 + i * 10, len = 150 + ((i * 53) % 5) * 26, sw = Math.sin(lt * 2.4 + i) * 16 - dir * 30;
+      const g = c.createLinearGradient(0, 60, 0, 60 + len);
+      g.addColorStop(0, T1); g.addColorStop(0.5, T2); g.addColorStop(1, 'rgba(120,10,10,0)');
+      c.fillStyle = g; c.beginPath(); c.moveTo(x0 - 6, 58);
+      c.bezierCurveTo(x0 - 8 + sw * 0.3, 60 + len * 0.4, x0 + sw * 0.8 - 3, 60 + len * 0.8, x0 + sw, 60 + len);
+      c.bezierCurveTo(x0 + sw * 0.8 + 3, 60 + len * 0.8, x0 + 8 + sw * 0.3, 60 + len * 0.4, x0 + 6, 58); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(255,220,200,0.25)'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(x0 - 2, 66); c.quadraticCurveTo(x0 + sw * 0.4, 60 + len * 0.5, x0 + sw * 0.8, 60 + len * 0.8); c.stroke();
     }
-    c.strokeStyle = 'rgba(40,40,35,0.5)'; c.lineWidth = 2.2;
-    c.beginPath(); c.moveTo(3, -4); c.quadraticCurveTo(8, 10, 5, 17); c.stroke();
-    c.fillStyle = 'rgba(30,20,20,0.5)'; c.beginPath(); c.ellipse(0, 19, 9, 4, 0, 0, Math.PI); c.fill();
-    c.fillStyle = '#1a0505'; c.beginPath(); c.ellipse(0, 36, 9, 6 + Math.sin(lt * 2) * 1.5, 0, 0, 7); c.fill();
-    c.strokeStyle = '#4a1414'; c.lineWidth = 2.5; c.stroke();
-    // hair over the forehead and down the sides of the face
-    c.fillStyle = '#050303';
-    c.beginPath(); c.moveTo(-48, 10); c.bezierCurveTo(-56, -50, -26, -72, 2, -70); c.bezierCurveTo(30, -70, 56, -50, 48, 10);
-    c.quadraticCurveTo(40, -30, 22, -40); c.quadraticCurveTo(0, -30, -10, -44); c.quadraticCurveTo(-34, -36, -48, 10); c.fill();
-    c.beginPath(); c.moveTo(-46, -10); c.quadraticCurveTo(-52, 50, -40, 110); c.lineTo(-30, 70); c.quadraticCurveTo(-38, 20, -32, -20); c.fill();
-    c.beginPath(); c.moveTo(46, -10); c.quadraticCurveTo(52, 50, 40, 110); c.lineTo(30, 70); c.quadraticCurveTo(38, 20, 32, -20); c.fill();
-    // the neck dissolves into the glow (no anatomy shown)
-    const ng = c.createLinearGradient(0, 40, 0, 110);
-    ng.addColorStop(0, 'rgba(190,185,170,0.9)'); ng.addColorStop(1, 'rgba(255,90,40,0)');
-    c.fillStyle = ng; c.beginPath(); c.moveTo(-20, 50); c.lineTo(-16, 110); c.lineTo(16, 110); c.lineTo(20, 50); c.closePath(); c.fill();
+    c.rotate(0.28 * dir + Math.sin(lt * 0.9) * 0.05);
+    // wet hair whipping sideways (trails away from the flight direction)
+    const hs = Math.sin(lt * 2) * 10;
+    c.fillStyle = '#040303';
+    c.beginPath(); c.moveTo(-40 * dir, -55);
+    c.bezierCurveTo(-120 * dir, -50 + hs, -200 * dir, -10 + hs, -260 * dir, 30 + hs * 1.5);
+    c.lineTo(-230 * dir, 60 + hs); c.bezierCurveTo(-160 * dir, 40, -90 * dir, 50, -44 * dir, 40); c.closePath(); c.fill();
+    c.strokeStyle = '#040303'; c.lineCap = 'round';
+    const hr = rng(77);
+    for (let i = 0; i < 22; i++) {
+      const y0 = -50 + hr() * 90, len = 140 + hr() * 150;
+      c.lineWidth = 1.5 + hr() * 4;
+      c.beginPath(); c.moveTo(-36 * dir, y0); c.bezierCurveTo(-(80 + len * 0.3) * dir, y0 + hs * 0.5, -(80 + len * 0.7) * dir, y0 + 20 + hs, -(60 + len) * dir, y0 + 40 + hs * 1.6); c.stroke();
+    }
+    // face: brown skin turned grey-green, hollow cheeks
+    const fg = c.createRadialGradient(10 * dir, -18, 6, 0, 0, 70);
+    fg.addColorStop(0, '#a08068'); fg.addColorStop(0.6, '#7a6a58'); fg.addColorStop(1, '#3e4a40');
+    c.fillStyle = fg; headPath(c, 0, 0, 0.82, 0.9); c.fill();
+    c.fillStyle = 'rgba(20,30,24,0.4)';
+    c.beginPath(); c.ellipse(-24, 22, 9, 18, 0.3, 0, 7); c.ellipse(24, 22, 9, 18, -0.3, 0, 7); c.fill();
+    // underlight from the glow on the jaw
+    c.save(); headPath(c, 0, 0, 0.82, 0.9); c.clip();
+    const ug = c.createLinearGradient(0, 60, 0, 0); ug.addColorStop(0, 'rgba(' + GL + ',0.55)'); ug.addColorStop(1, 'rgba(' + GL + ',0)');
+    c.fillStyle = ug; c.fillRect(-60, 0, 120, 60); c.restore();
+    [-1, 1].forEach((s) => {
+      c.fillStyle = 'rgba(15,8,8,0.6)'; c.beginPath(); c.ellipse(s * 16, -6, 13, 9, 0, 0, 7); c.fill();
+      c.fillStyle = '#d8ccb8'; c.beginPath(); c.ellipse(s * 16, -6, 8, 5.5, 0, 0, 7); c.fill();
+      dot(c, s * 16 + dir * 2, -6, 2.4, '#0a0404');
+    });
+    if (ch.eyes !== false) { c.globalCompositeOperation = 'lighter'; [-1, 1].forEach((s) => glowRadial(c, s * 16, -6, 1, 16, GL, 0.35 * pulse)); c.globalCompositeOperation = 'source-over'; }
+    c.strokeStyle = '#1a1210'; c.lineWidth = 3; [-1, 1].forEach((s) => { c.beginPath(); c.moveTo(s * 7, -22); c.quadraticCurveTo(s * 17, -27, s * 27, -20); c.stroke(); });
+    c.strokeStyle = 'rgba(40,30,25,0.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(3, -4); c.quadraticCurveTo(7, 9, 4, 15); c.stroke();
+    c.fillStyle = 'rgba(30,20,18,0.55)'; c.beginPath(); c.ellipse(0, 17, 7, 3, 0, 0, Math.PI); c.fill();
+    // faint, too-wide grin with a dark gap
+    c.fillStyle = '#160404'; c.beginPath(); c.moveTo(-17, 30); c.quadraticCurveTo(0, 42, 17, 30); c.quadraticCurveTo(0, 36, -17, 30); c.fill();
+    c.strokeStyle = '#4a1c18'; c.lineWidth = 2; c.beginPath(); c.moveTo(-19, 29); c.quadraticCurveTo(0, 43, 19, 29); c.stroke();
+    // hair over the crown
+    c.fillStyle = '#040303';
+    c.beginPath(); c.moveTo(-40, 6); c.bezierCurveTo(-46, -46, -20, -62, 2, -60); c.bezierCurveTo(28, -60, 46, -44, 40, 6);
+    c.quadraticCurveTo(30, -26, 10, -34); c.quadraticCurveTo(-14, -30, -40, 6); c.fill();
   }
 
   // Jeruju: a bundle of spiny leaves hung on a string at a window. Origin = the hook.
@@ -2061,15 +2076,25 @@
     c.fillStyle = '#8a2a20'; c.fillRect(-9, -6, 18, 14); c.fillStyle = '#e8e0d0'; c.fillRect(-9, -1, 18, 3);
     if (ch.hair) {
       const hs = Math.sin(lt * 0.9) * 6;
-      c.strokeStyle = '#040404'; c.lineCap = 'round';
+      c.lineCap = 'round';
       const hr = rng(19);
-      for (let i = 0; i < 34; i++) {
-        const x0 = -90 + hr() * 180, y0 = 60 + hr() * 70, end = y0 + 260 + hr() * 300;
-        c.lineWidth = 1.5 + hr() * 3;
-        c.beginPath(); c.moveTo(x0, y0); c.bezierCurveTo(x0 + 10, y0 + 120, x0 - 14 + hs, end - 120, x0 + hs * 1.5, end); c.stroke();
+      // 5 wet clumps snagged on thorns: each a tapered lock plus loose strands curling off it
+      for (let k2 = 0; k2 < 5; k2++) {
+        const ax = -95 + k2 * 46 + hr() * 14, ay = 70 + hr() * 60, len = 220 + hr() * 260, cx = ax + (hr() - 0.5) * 60;
+        const g = c.createLinearGradient(ax, 0, ax + 24, 0); g.addColorStop(0, '#020202'); g.addColorStop(0.5, '#14181b'); g.addColorStop(1, '#020202');
+        c.fillStyle = g;
+        c.beginPath(); c.moveTo(ax - 5, ay); c.bezierCurveTo(cx - 4, ay + len * 0.4, cx + hs - 2, ay + len * 0.8, ax + hs * 1.4, ay + len);
+        c.bezierCurveTo(cx + hs + 2, ay + len * 0.8, cx + 4, ay + len * 0.4, ax + 5, ay); c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(190,215,230,0.55)'; c.lineWidth = 1.3;
+        c.beginPath(); c.moveTo(ax + 2, ay + 10); c.bezierCurveTo(cx + 2, ay + len * 0.4, cx + hs, ay + len * 0.75, ax + hs * 1.3, ay + len * 0.95); c.stroke();
+        c.strokeStyle = '#030303';
+        for (let j = 0; j < 14; j++) {
+          const l2 = len * (0.4 + hr() * 0.6), off = (hr() - 0.5) * 30;
+          c.lineWidth = 0.8 + hr() * 1.4;
+          c.beginPath(); c.moveTo(ax + off * 0.3, ay); c.bezierCurveTo(ax + off, ay + l2 * 0.3, cx + off * 1.5 + hs, ay + l2 * 0.7, ax + off * 2 + hs, ay + l2); c.stroke();
+        }
+        c.lineWidth = 1.2; c.beginPath(); c.arc(ax, ay - 6, 7, 0.4, Math.PI * 1.7); c.stroke();     // curl around a thorn
       }
-      c.strokeStyle = 'rgba(170,190,200,0.4)'; c.lineWidth = 1.4;
-      for (let i = 0; i < 10; i++) { const x0 = -70 + i * 15; c.beginPath(); c.moveTo(x0, 90); c.bezierCurveTo(x0 + 8, 200, x0 - 10 + hs, 330, x0 + hs, 440); c.stroke(); }
       for (let i = 0; i < 6; i++) {   // dripping water
         const r = rng(i * 23 + 4), q = (lt * (0.6 + r() * 0.4) + r()) % 1;
         c.fillStyle = 'rgba(200,220,230,' + (0.9 - q * 0.6) + ')';
@@ -2129,7 +2154,7 @@
       c.fillStyle = '#08090c'; c.fillRect(0, 0, LW, LH);
       const win = { x: 90, y: 330, w: 900, h: 780 };
       c.save(); c.beginPath(); c.roundRect(win.x, win.y, win.w, win.h, 34); c.clip();
-      sky(c, T, sc.moon !== false, r, win.y + win.h);
+      sky(c, T, moonOf(sc), r, win.y + win.h);
       c.restore();
       c.fillStyle = '#16171b'; c.fillRect(0, 0, LW, 300);
       c.strokeStyle = 'rgba(255,255,255,0.04)'; c.lineWidth = 2;
@@ -2149,12 +2174,12 @@
     // wooden boardwalk in front (characters stand on it at y≈1350). `houses` 0–3, `boardwalk: false`.
     river(c, r, T, sc) {
       const WY = 1000;
-      sky(c, T, sc.moon !== false, r, WY);
+      sky(c, T, moonOf(sc), r, WY);
       jungle(c, r, WY, '#060b0e', 60, 110);
       jungle(c, r, WY + 6, '#030608', 30, 60);
       water(c, WY, T);
       if (sc.moon !== false) {
-        for (let i = 0; i < 30; i++) { const w = 30 + r() * 110 * (1 - i / 34); c.fillStyle = 'rgba(235,230,210,' + 0.22 * (1 - i / 30) + ')'; c.fillRect(790 - w / 2 + (r() - 0.5) * 30, WY + 8 + i * 11, w, 3); }
+        for (let i = 0; i < 30; i++) { const w = 30 + r() * 110 * (1 - i / 34); c.fillStyle = 'rgba(235,230,210,' + 0.22 * (1 - i / 30) + ')'; c.fillRect(moonOf(sc).x - w / 2 + (r() - 0.5) * 30, WY + 8 + i * 11, w, 3); }
       }
       const n = sc.houses == null ? 3 : sc.houses;
       const windows = [], refl = [];
@@ -2163,6 +2188,17 @@
         const w = stiltHouse(c, x, base, k, T);
         windows.push(w); refl.push({ x: w.x, w: w.w, y: base + 30 * k });
       });
+      // a moored klotok (long-tail boat) and floating water hyacinth
+      if (sc.boat !== false) {
+        const bx = 690, by = WY + 150;
+        c.fillStyle = '#0d0907'; c.beginPath(); c.moveTo(bx - 170, by - 18); c.quadraticCurveTo(bx, by + 22, bx + 180, by - 26); c.lineTo(bx + 160, by - 4); c.quadraticCurveTo(bx, by + 30, bx - 150, by + 2); c.closePath(); c.fill();
+        c.fillStyle = '#120d09'; c.fillRect(bx - 70, by - 70, 120, 50);
+        c.fillStyle = '#0a0807'; c.beginPath(); c.moveTo(bx - 84, by - 70); c.lineTo(bx + 64, by - 70); c.lineTo(bx + 50, by - 86); c.lineTo(bx - 70, by - 86); c.fill();
+        c.strokeStyle = '#0a0807'; c.lineWidth = 3; c.beginPath(); c.moveTo(bx + 175, by - 24); c.lineTo(bx + 240, by - 2); c.stroke();
+        c.fillStyle = 'rgba(' + T.fog + ',0.1)'; c.fillRect(bx - 150, by + 4, 320, 3);
+      }
+      c.fillStyle = '#0a160c';
+      for (let i = 0; i < 9; i++) { const x = r() * LW, y = WY + 60 + r() * 220; c.beginPath(); c.ellipse(x, y, 26 + r() * 30, 7, 0, 0, 7); c.fill(); }
       if (sc.boardwalk !== false) {
         c.fillStyle = '#0b0806';
         for (let x = 30; x < LW; x += 190) c.fillRect(x, 1360, 22, 300);
@@ -2176,7 +2212,7 @@
     // Close exterior of one wooden stilt house by the river: plank walls, zinc roof,
     // a window with open shutters (lit: `litWindow: 0`), porch at y≈1270, oil lamp by the door.
     bedeng(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1150);
+      sky(c, T, moonOf(sc), r, 1150);
       jungle(c, r, 1060, '#04080b', 80, 150);
       water(c, 1390, T);
       c.fillStyle = '#0c0806';
@@ -2274,7 +2310,7 @@
     // a bamboo hut (dangau) on stilts and a scarecrow. Feet on the dike path at y≈1350.
     sawah(c, r, T, sc) {
       const HZ = 960;
-      sky(c, T, sc.moon !== false, r, HZ);
+      sky(c, T, moonOf(sc), r, HZ);
       c.fillStyle = '#05080b';
       c.beginPath(); c.moveTo(0, HZ); for (let x = 0; x <= LW; x += 40) c.lineTo(x, HZ - 120 - Math.sin(x * 0.006) * 90 - Math.sin(x * 0.017) * 30); c.lineTo(LW, HZ); c.fill();
       water(c, HZ, T);
@@ -2305,7 +2341,7 @@
 
     // Bamboo grove: dense jointed culms in layers, leaf clusters overhead, a trodden path.
     bambu(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1300);
+      sky(c, T, moonOf(sc), r, 1300);
       const layer = (n, col, w0, w1, joint) => {
         for (let i = 0; i < n; i++) {
           const x = r() * LW, w = w0 + r() * (w1 - w0), lean = (r() - 0.5) * 60;
@@ -2329,7 +2365,7 @@
     // Old well in a backyard: stone ring with a wooden roof frame, rope and bucket,
     // banana trees, a clothesline and the back wall of the house. Feet at y≈1350.
     sumur(c, r, T, sc) {
-      sky(c, T, sc.moon !== false, r, 1180);
+      sky(c, T, moonOf(sc), r, 1180);
       planks(c, 0, 640, 360, 640, 28, false, '#15100b');
       c.fillStyle = '#08070a'; c.fillRect(110, 820, 130, 150);
       c.fillStyle = '#0e0c0a'; c.beginPath(); c.moveTo(-20, 660); c.lineTo(180, 520); c.lineTo(400, 660); c.fill();
@@ -2375,7 +2411,7 @@
     if (sc.moon !== false) {
       for (let i = 0; i < 12; i++) {
         const y = M.y0 + 20 + i * 26, w = (40 + Math.sin(lt * 3 + i * 1.7) * 30) * (1 - i / 14);
-        c.fillStyle = 'rgba(240,235,215,' + 0.25 * (1 - i / 12) + ')'; c.fillRect(790 - w / 2 + Math.sin(lt * 2 + i) * 10, y, w, 3);
+        c.fillStyle = 'rgba(240,235,215,' + 0.25 * (1 - i / 12) + ')'; c.fillRect(moonOf(sc).x - w / 2 + Math.sin(lt * 2 + i) * 10, y, w, 3);
       }
     }
     const idx = sc.litWindow == null ? 0 : sc.litWindow;
@@ -2562,20 +2598,36 @@
 
   // Draws a character in full color, then tints it with the scene light and adds a rim glow.
   // `light`: 'night' (default), 'warm' (lamp/pelita), 'red', 'none'.
-  function paintLit(c, alpha, blur, placeFn, T, ch) {
+  // Ghost-type characters. A scene is a "horror scene" when it shows one of these, has a
+  // jumpscare, a red tone or a heartbeat — or when the scene sets `horror: true/false`.
+  const GHOSTS = { ghost: 1, pocong: 1, genderuwo: 1, tuyul: 1, ngesot: 1, banaspati: 1, hand: 1, hair: 1, shadow: 1, eyes: 1, kuyang: 1, wewe: 1, leak: 1, begu: 1, welthok: 1 };
+  function isHorror(sc) {
+    if (sc.horror != null) return !!sc.horror;
+    if (sc._horror == null) sc._horror = !!(sc.scare || sc.tone === 'red' || has(sc, 'heartbeat') || (sc.chars || []).some((ch) => GHOSTS[ch.type]));
+    return sc._horror;
+  }
+  // People stay natural (gentle night tint); ghosts get the full drained, shadowed treatment.
+  function paintLit(c, alpha, blur, placeFn, T, ch, horror) {
     sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, W, H);
     sctx.setTransform(c.getTransform()); sctx.globalAlpha = 1; sctx.globalCompositeOperation = 'source-over';
     placeFn(sctx);
     sctx.setTransform(1, 0, 0, 1, 0, 0);
     const light = ch.light || 'night';
+    const ghostly = !!GHOSTS[ch.type];
     if (light !== 'none') {
       sctx.globalCompositeOperation = 'source-atop';
-      sctx.fillStyle = light === 'warm' ? 'rgba(255,150,70,0.16)' : light === 'red' ? 'rgba(190,30,20,0.28)' : light === 'under' ? 'rgba(40,60,50,0.3)' : 'rgba(10,18,34,0.26)';
-      sctx.fillRect(0, 0, W, H);
-      sctx.fillStyle = 'rgba(62,66,74,0.22)'; sctx.fillRect(0, 0, W, H);          // drain the color
-      // moonlight from above: everything sinks into shadow toward the ground
+      if (ghostly) {
+        sctx.fillStyle = light === 'red' ? 'rgba(190,30,20,0.28)' : 'rgba(10,18,34,0.26)';
+        sctx.fillRect(0, 0, W, H);
+        sctx.fillStyle = 'rgba(62,66,74,0.22)'; sctx.fillRect(0, 0, W, H);          // drain the color
+      } else {
+        sctx.fillStyle = light === 'warm' ? 'rgba(255,160,80,0.12)' : light === 'red' ? 'rgba(190,30,20,0.2)' : light === 'under' ? 'rgba(40,60,50,0.25)' : 'rgba(20,30,55,0.1)';
+        sctx.fillRect(0, 0, W, H);
+      }
+      // light from above: the lower body sits a little deeper in shadow
       const vg = sctx.createLinearGradient(0, 0, 0, H);
-      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(0.55, 'rgba(0,0,0,0.12)'); vg.addColorStop(1, 'rgba(0,0,0,0.5)');
+      const lo = ghostly ? 0.5 : 0.22;
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(0.55, 'rgba(0,0,0,' + lo * 0.25 + ')'); vg.addColorStop(1, 'rgba(0,0,0,' + lo + ')');
       sctx.fillStyle = vg; sctx.fillRect(0, 0, W, H);
       if (light === 'under') {   // lit from below like a flashlight under the chin
         const ug = sctx.createLinearGradient(0, 0, 0, H);
@@ -2585,7 +2637,8 @@
       sctx.globalCompositeOperation = 'source-over';
     }
     c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = alpha;
-    if (ch.rim !== false) { c.shadowColor = T.rim; c.shadowBlur = (ch.type === 'person' ? 9 : 16) * SC; }
+    // rim light: ghosts glow, people only get a faint edge so they separate from the dark
+    if (ch.rim !== false) { c.shadowColor = ghostly ? T.rim : 'rgba(140,160,190,0.35)'; c.shadowBlur = (ghostly ? 16 : horror ? 5 : 4) * SC; }
     if (blur) c.filter = 'blur(' + blur * SC + 'px)';
     c.drawImage(stage, 0, 0); c.restore();
   }
@@ -2672,7 +2725,7 @@
       paintSilhouette(c, ch.silhouette === true ? '#000' : ch.silhouette, baseA, ch.blur || 0, (g) => place(g));
       return;
     }
-    if (LIT[ch.type] && ch.style !== 'silhouette') { paintLit(c, baseA, ch.blur || 0, (g) => place(g), T, ch); return; }
+    if (LIT[ch.type] && ch.style !== 'silhouette') { paintLit(c, baseA, ch.blur || 0, (g) => place(g), T, ch, isHorror(sc)); return; }
     c.save();
     c.globalAlpha = baseA;
     if (ch.blur) c.filter = 'blur(' + ch.blur * SC + 'px)';
@@ -2979,7 +3032,8 @@
     ctx.restore();
 
     // horror grade: partly desaturated, cold, crushed — off with story/scene `grade: false`
-    if (S.grade !== false && sc.grade !== false) {
+    const horrorNow = isHorror(sc);
+    if (S.grade !== false && sc.grade !== false && horrorNow) {
       ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = 'rgba(128,128,128,0.3)'; ctx.fillRect(0, 0, LW, LH);
       ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgba(150,165,190,0.22)'; ctx.fillRect(0, 0, LW, LH);
       ctx.globalCompositeOperation = 'source-over';
@@ -2989,8 +3043,10 @@
     if (has(sc, 'flicker') && hash(t * 12 + sc.i * 7) < 0.18) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, LW, LH); }
     if (L.lvl > 0) { ctx.fillStyle = 'rgba(230,235,255,' + L.lvl * 0.18 + ')'; ctx.fillRect(0, 0, LW, LH); }
     const beat = has(sc, 'heartbeat') ? Math.exp(-14 * (lt % 0.85)) + 0.7 * Math.exp(-14 * ((lt + 0.63) % 0.85)) : 0;
-    const vg = ctx.createRadialGradient(540, 900, 320 - beat * 120, 540, 960, 1080 - beat * 160);
-    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, beat > 0 ? 'rgba(40,0,0,0.95)' : 'rgba(0,0,0,0.94)');
+    const vg = horrorNow
+      ? ctx.createRadialGradient(540, 900, 320 - beat * 120, 540, 960, 1080 - beat * 160)
+      : ctx.createRadialGradient(540, 900, 420, 540, 960, 1200);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, beat > 0 ? 'rgba(40,0,0,0.95)' : horrorNow ? 'rgba(0,0,0,0.94)' : 'rgba(0,0,0,0.78)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, LW, LH);
     const band = ctx.createLinearGradient(0, 1380, 0, LH);
     band.addColorStop(0, 'rgba(0,0,0,0)'); band.addColorStop(1, 'rgba(0,0,0,0.75)');

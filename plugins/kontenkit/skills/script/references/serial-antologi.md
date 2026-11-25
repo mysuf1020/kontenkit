@@ -22,13 +22,13 @@ Kalau seri baru, karang identitasnya dan tulis di file peta seri. Kalau sudah ad
 - **Satu daerah, satu pantangan, satu sosok yang benar-benar ada dalam cerita rakyat daerah itu**, disebut dengan nama aslinya: kuyang (Kalimantan), palasik (Minang), wewe gombel (Semarang), leak (Bali), welthok (Surabaya), parakang (Bugis), begu ganjang (Batak), dan seterusnya. Nama daerah setingkat provinsi/kota/suku, bukan nama desa, sekolah, atau RS sungguhan (lihat Batas konten di SKILL.md).
 - **Pantangannya nyata** — yang memang diucapkan orang tua di daerah itu. Kalau ragu soal detail mitosnya, tulis versi yang umum dikenal dan jangan mengarang asal-usul yang terdengar seperti fakta.
 - **Struktur beat** tetap seperti SKILL.md, dengan dua penyesuaian: hook = pembuka tetap; setup memperkenalkan daerah + sosok sebagai mitos ("Orang sana nyebutnya..."), lalu cerita pengalaman orang yang melanggar.
-- **Durasi default 75–100 dtk** (lebih dalam dari 60 dtk, dan lolos syarat >1 menit). Hitung anggaran kata dengan aturan langkah 3 SKILL.md untuk durasi yang dipilih.
+- **Durasi ikut standar SKILL.md: audio minimal 90 dtk** (115–135 kata VO, lihat langkah 3).
 - **Teks layar besar dan pendek**: ≤5 kata per baris, huruf kapital, 1 kata kunci bertanda `*bintang*`. Tiap episode punya satu baris teks layar "tanda tangan" berisi pantangannya (mis. `JANGAN *JEMUR* BAJU`), supaya tetap kebaca walau suara dimatikan.
 - **Judul file**: `<seri-slug>-NN.md` (dua digit, mis. `larangan-daerah-01.md`).
 
 ## Untuk skill anim
 
-Engine anim belum punya semua sosok daerah. Petakan sosok ke tipe yang ada dan biarkan samar: bola cahaya terbang → `banaspati`; sosok tinggi/hitam → `shadow` atau `genderuwo`; perempuan → `ghost`; anak kecil → `tuyul`; tangan/rambut → `hand`/`hair`; atau cukup `eyes` dan bayangan (`cast.only`). Catat pemetaan yang dipakai di peta seri supaya sosok yang sama terlihat sama di episode berikutnya.
+Engine anim sudah punya `kuyang`, `kuyang` + `variant: 'palasik'`, `leak`, `wewe` (wewe gombel), `begu` (begu ganjang), `welthok`, `pocong`, `genderuwo`, `ghost` (kuntilanak/burong). Sosok lain dipetakan ke tipe yang ada dan dibiarkan samar: bola cahaya terbang → `banaspati`; sosok tinggi/hitam → `shadow` atau `genderuwo`; perempuan → `ghost`; anak kecil → `tuyul`; tangan/rambut → `hand`/`hair`; atau cukup `eyes` dan bayangan (`cast.only`). Catat pemetaan yang dipakai di peta seri supaya sosok yang sama terlihat sama di episode berikutnya.
 
 ## File peta seri
 
@@ -37,7 +37,7 @@ Satu file `<seri-slug>-00-seri.md` di folder script. Buat saat episode #1 dituli
 ~~~markdown
 # [Nama Seri] — peta seri
 
-Serial antologi, ±[durasi] dtk per episode. Narator: [siapa, cara bicara, kebiasaan khas].
+Serial antologi, audio ≥90 dtk per episode. Narator: [siapa, cara bicara, kebiasaan khas].
 Pembuka tetap: "[pola]" · Penutup tetap: "[pola]"
 
 ## Style instructions (sama di semua episode)

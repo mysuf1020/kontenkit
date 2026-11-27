@@ -2714,13 +2714,16 @@
     }
     else for (const a of Object.values(A)) { if (a.names && a.names.indexOf(act) >= 0) { seq = a; fi = a.names.indexOf(act); break; } }
     if (seq) {
-      if (!seq.k) { const hs = seq.frames.map((f) => f.h).sort((a, b) => a - b); seq.k = 520 * (P.tall || 1) * (seq.scale || 1) / hs[Math.floor(hs.length / 2)]; }
+      if (!seq.k) { const hs = seq.frames.map((f) => f.h).sort((a, b) => a - b); seq.med = hs[Math.floor(hs.length / 2)]; seq.k = 520 * (P.tall || 1) * (seq.scale || 1) / seq.med; }
       const fr = seq.frames[fi];
       const still = !!seq.names;
+      // walk/run frames are each brought to the sheet's median height: generated frames differ by
+      // up to ~7%, which reads as the body pulsing while it walks
+      const kf = (act === 'walk' || act === 'run') && !still ? seq.k * seq.med / fr.h : seq.k;
       c.save();
       c.imageSmoothingQuality = 'high';
       if (still) c.translate(q.dx, -Math.abs(q.dy) * 0.5);
-      c.scale(seq.k, seq.k);
+      c.scale(kf, kf);
       // a still pose of a living character stands on its own soles: frames are cut against the
       // sheet's lowest foot, so a standing pose next to a crouch would otherwise hover. Ghost poses
       // and loops (hop, float) keep the sheet baseline, where the height above it is drawn on purpose.

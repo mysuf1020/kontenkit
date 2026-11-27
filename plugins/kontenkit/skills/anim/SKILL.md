@@ -14,7 +14,7 @@ Base directory skill ini (tempat SKILL.md berada) berisi:
 - `scripts/puppet-cut.mjs` — memotong sheet karakter green screen jadi puppet (`rig.json` + PNG)
 - `engine/engine.js` — engine gambar; jangan diubah untuk satu video, cukup tulis file story
 - `references/story-schema.md` — **semua** opsi scene, latar, karakter, efek, dan suara. Baca sebelum menulis story.
-- `references/puppets.md` — aset karakter gambar: format sheet, spec potong, cek hasil, dan cara pakai di story. Baca sebelum memakai atau membuat puppet.
+- `references/puppets.md` — aset karakter gambar: format sheet, spec potong, cek hasil, cara pakai di story, dan kalibrasi skala latar gambar (`bg.json`) supaya ukuran karakter cocok dengan pintu/perabot. Baca sebelum memakai atau membuat puppet.
 - `references/horror-writing.md` — struktur cerita, hook, dan aturan teks. Baca sebelum menulis naskah.
 - `examples/rumah-kosong.js` — contoh story lengkap yang sudah teruji
 

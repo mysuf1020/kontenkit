@@ -131,24 +131,28 @@ function loadPuppets(S, storyPath) {
 // Image backgrounds: the story's `backgrounds` field names folders (relative to the story file).
 // A scene `bg` that matches an image file name (without extension) anywhere under them is drawn
 // from that image instead of a built-in background. Only the images the scenes use are loaded.
+// A `bg.json` anywhere under those folders maps image names to their perspective scale
+// ({ horizon, person }), used by the engine to size puppets (see references/puppets.md).
 function loadBackgrounds(S, storyPath) {
   const dirs = [].concat(S.backgrounds || []).map((d) => path.resolve(path.dirname(storyPath), d));
-  const files = {};
+  const files = {}, meta = {};
   const walk = (d) => {
     if (!fs.existsSync(d)) throw new Error('Background folder not found: ' + d);
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, e.name);
       if (e.isDirectory()) walk(p);
+      else if (e.name === 'bg.json') Object.assign(meta, JSON.parse(fs.readFileSync(p, 'utf8')));
       else if (MIME[path.extname(e.name).toLowerCase()]) files[path.parse(e.name).name] = p;
     }
   };
   dirs.forEach(walk);
-  const out = {};
+  const images = {}, scale = {};
   for (const sc of S.scenes) {
-    if (!sc.bg || out[sc.bg] || !files[sc.bg]) continue;
-    out[sc.bg] = assetUrl(files[sc.bg]);
+    if (!sc.bg || images[sc.bg] || !files[sc.bg]) continue;
+    images[sc.bg] = assetUrl(files[sc.bg]);
+    if (meta[sc.bg]) scale[sc.bg] = meta[sc.bg];
   }
-  return out;
+  return { images, scale };
 }
 
 function run(cmd, args, opts = {}) {
@@ -235,10 +239,12 @@ async function main() {
   const engine = fs.readFileSync(ENGINE, 'utf8');
   const puppets = loadPuppets(S, storyPath);
   if (Object.keys(puppets).length) console.log('Puppets: ' + Object.keys(puppets).join(', '));
-  const bgImages = loadBackgrounds(S, storyPath);
+  const { images: bgImages, scale: bgScale } = loadBackgrounds(S, storyPath);
   if (Object.keys(bgImages).length) console.log('Background images: ' + Object.keys(bgImages).join(', '));
+  const unscaled = Object.keys(bgImages).filter((n) => !bgScale[n]);
+  if (unscaled.length) console.warn('WARNING: no bg.json scale for ' + unscaled.join(', ') + ' — puppets there keep their story size.');
   const html = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000">
-<canvas id="c"></canvas><script>window.STORY=${JSON.stringify(S)};window.PUPPETS=${JSON.stringify(puppets)};window.BGIMG=${JSON.stringify(bgImages)};</script><script>${engine}</script></body></html>`;
+<canvas id="c"></canvas><script>window.STORY=${JSON.stringify(S)};window.PUPPETS=${JSON.stringify(puppets)};window.BGIMG=${JSON.stringify(bgImages)};window.BGSCALE=${JSON.stringify(bgScale)};</script><script>${engine}</script></body></html>`;
 
   const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true, args: ['--no-first-run', '--disable-extensions'] });
   try {

@@ -64,11 +64,11 @@ Cek sebelum dipakai:
 ## 4. Di story
 
 ```js
-puppets: ['../puppets'], backgrounds: ['../aset/set-tempat'],
+puppets: ['../puppets'], backgrounds: ['../aset/set-tempat'],   // set-tempat berisi bg.json
 scenes: [
   { dur: 3, bg: 'ruang-belajar', camera: { zoom: [1.45, 1.5], focus: [540, 820] },
-    chars: [{ type: 'puppet', name: 'yusuf', x: 0.3, size: 1.35, talk: true, light: 'warm' },
-            { type: 'puppet', name: 'amel', x: 0.7, size: 1.35, face: -1, light: 'warm' }] },
+    chars: [{ type: 'puppet', name: 'yusuf', x: 0.3, talk: true, light: 'warm' },
+            { type: 'puppet', name: 'amel', x: 0.7, face: -1, light: 'warm' }] },
 ]
 ```
 
@@ -80,9 +80,24 @@ scenes: [
 | `mood` | `scared`, `shout`, `laugh`, `sleep`, atau nama ekspresi yang ada di puppet (`sad`, `smile`…). |
 | `expr` | nama ekspresi langsung, mis. `pos1` untuk wajah kesurupan. |
 | `face` | `-1` = hadap kiri (gambar dibalik). Dua karakter ngobrol: kiri `face: 1`, kanan `face: -1`. Default mengikuti arah gerak. |
-| `size` | ±1.35 untuk adegan biasa; close-up lewat `camera.zoom` + `focus`, bukan `size` raksasa. |
+| `y` | garis kaki = kedalaman. Default 1350 (depan). Di latar gambar yang punya skala, `y` lebih kecil = lebih jauh dan otomatis lebih kecil (mis. 1200 = beberapa meter di belakang). |
+| `size` | di latar gambar berskala: pengali, biarkan 1 (ukuran sudah mengikuti pintu/perabot). Di latar tanpa skala: ukuran langsung, ±1.35. Close-up lewat `camera.zoom` + `focus`, bukan `size` raksasa. |
 | `light` | `night` (default), `warm`, `none` (siang / latar terang). |
 
 Ekspresi, mulut, dan napas hanya berlaku di badan dasar; pose dan siklus adalah gambar utuh, jadi wajahnya mengikuti gambar pose itu.
 
-**Kecepatan jalan.** Langkah kaki disinkronkan dengan jarak tempuh (satu siklus = 0.8 tinggi badan untuk jalan, 1.4 untuk lari), jadi kaki tidak meluncur. Konsekuensinya, gerak yang terlalu lambat terlihat seperti jalan slow-motion. Jalan normal pada `size` 1.35 menyeberangi layar (`x` 0.05 → 0.95) dalam ±2 dtk, lari (−0.15 → 1.15) ±1.4 dtk. Untuk berjalan lalu berhenti, pecah jadi dua scene (jalan, lalu diam di posisi akhir).
+**Kecepatan jalan.** Langkah kaki disinkronkan dengan jarak tempuh (satu siklus = 0.8 tinggi badan untuk jalan, 1.4 untuk lari), jadi kaki tidak meluncur. Konsekuensinya, gerak yang terlalu lambat terlihat seperti jalan slow-motion. Dengan tinggi orang ±560 px, jalan normal menyeberangi layar (`x` 0.05 → 0.95) dalam ±2 dtk, lari (−0.15 → 1.15) ±1.4 dtk. Untuk berjalan lalu berhenti, pecah jadi dua scene (jalan, lalu diam di posisi akhir).
+
+## 5. Skala latar gambar (`bg.json`)
+
+Tanpa skala, puppet selalu setinggi `520 × size` px di mana pun, sehingga bisa lebih tinggi dari pintu di latar sempit atau kerdil di aula besar. `bg.json` di folder latar memberi tiap gambar dua angka:
+
+```json
+{ "koridor-gedung-c": { "horizon": 1000, "person": 560 },
+  "gedung-wisuda":    { "horizon": 960,  "person": 330 } }
+```
+
+- `person` — tinggi orang dewasa (px logis) yang kakinya di `y = 1350`. Patokan: daun pintu ±2,1 m (tanpa jalusi/ventilasi di atasnya), meja ±0,75 m, dudukan kursi ±0,45 m, rak toko ±1,8 m; orang 1,7 m ≈ 80% daun pintu.
+- `horizon` — `y` titik hilang lantai (garis-garis ubin/dinding bertemu). Tinggi orang turun linear ke nol di garis ini, jadi karakter di `y` 1200 lebih kecil dari yang di 1350.
+
+Kalibrasi: buat story dengan satu scene per latar, isi dua orang di `y` 1350 dan satu di `y` 1200, render `--stills` di tengah tiap scene, lalu bandingkan dengan pintu dan perabot di dekat kakinya. Naikkan/turunkan `person` sampai pas; geser `horizon` kalau orang yang jauh terlihat terlalu besar/kecil. Latar interior biasa umumnya `person` 520–580, `horizon` ±1000; aula, gerbang, dan halaman jauh lebih kecil (260–330).

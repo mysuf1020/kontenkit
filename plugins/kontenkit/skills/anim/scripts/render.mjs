@@ -91,6 +91,66 @@ function loadStory(file, draft) {
   return S;
 }
 
+// Image-part characters ("puppets"): the story's `puppets` field names folders (relative to the
+// story file) whose subfolders each hold a rig.json plus PNG parts. Image files are not inlined
+// (a big cast runs to hundreds of MB and crashes the page): each gets a URL on a fake origin that
+// the page itself is served from, and request interception answers it from disk (same origin, so
+// the canvas is not tainted).
+const MIME = { '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
+const ORIGIN = 'https://kontenkit.local/';
+const ASSETS = [];
+function assetUrl(p) {
+  if (!MIME[path.extname(p).toLowerCase()]) throw new Error('Unsupported image type: ' + p);
+  if (!fs.existsSync(p)) throw new Error('Image not found: ' + p);
+  ASSETS.push(p);
+  return ORIGIN + 'a/' + (ASSETS.length - 1) + path.extname(p).toLowerCase();
+}
+function loadPuppets(S, storyPath) {
+  const dirs = [].concat(S.puppets || []).map((d) => path.resolve(path.dirname(storyPath), d));
+  const out = {};
+  const inline = (dir, file) => assetUrl(path.join(dir, file));
+  // only the puppets the scenes use, so a big cast doesn't bloat every page
+  const used = new Set(S.scenes.flatMap((sc) => (sc.chars || []).filter((c) => c.type === 'puppet').map((c) => c.name)));
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) throw new Error('Puppet folder not found: ' + dir);
+    for (const name of fs.readdirSync(dir)) {
+      if (!used.has(name)) continue;
+      const rigFile = path.join(dir, name, 'rig.json');
+      if (!fs.existsSync(rigFile)) continue;
+      const rig = JSON.parse(fs.readFileSync(rigFile, 'utf8'));
+      const base = path.join(dir, name);
+      for (const p of rig.parts) p.src = inline(base, p.src);
+      for (const f of Object.values(rig.faces || {})) f.src = inline(base, f.src);
+      for (const a of Object.values(rig.anims || {})) for (const fr of a.frames) fr.src = inline(base, fr.src);
+      out[name] = rig;
+    }
+  }
+  return out;
+}
+
+// Image backgrounds: the story's `backgrounds` field names folders (relative to the story file).
+// A scene `bg` that matches an image file name (without extension) anywhere under them is drawn
+// from that image instead of a built-in background. Only the images the scenes use are loaded.
+function loadBackgrounds(S, storyPath) {
+  const dirs = [].concat(S.backgrounds || []).map((d) => path.resolve(path.dirname(storyPath), d));
+  const files = {};
+  const walk = (d) => {
+    if (!fs.existsSync(d)) throw new Error('Background folder not found: ' + d);
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (MIME[path.extname(e.name).toLowerCase()]) files[path.parse(e.name).name] = p;
+    }
+  };
+  dirs.forEach(walk);
+  const out = {};
+  for (const sc of S.scenes) {
+    if (!sc.bg || out[sc.bg] || !files[sc.bg]) continue;
+    out[sc.bg] = assetUrl(files[sc.bg]);
+  }
+  return out;
+}
+
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { stdio: ['pipe', 'ignore', 'pipe'], ...opts });
@@ -173,16 +233,31 @@ async function main() {
   }
 
   const engine = fs.readFileSync(ENGINE, 'utf8');
+  const puppets = loadPuppets(S, storyPath);
+  if (Object.keys(puppets).length) console.log('Puppets: ' + Object.keys(puppets).join(', '));
+  const bgImages = loadBackgrounds(S, storyPath);
+  if (Object.keys(bgImages).length) console.log('Background images: ' + Object.keys(bgImages).join(', '));
   const html = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000">
-<canvas id="c"></canvas><script>window.STORY=${JSON.stringify(S)};</script><script>${engine}</script></body></html>`;
+<canvas id="c"></canvas><script>window.STORY=${JSON.stringify(S)};window.PUPPETS=${JSON.stringify(puppets)};window.BGIMG=${JSON.stringify(bgImages)};</script><script>${engine}</script></body></html>`;
 
   const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true, args: ['--no-first-run', '--disable-extensions'] });
   try {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.setContent(html, { waitUntil: 'load' });
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const u = req.url();
+      if (!u.startsWith(ORIGIN)) return req.continue();
+      if (u === ORIGIN) return req.respond({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+      const m = u.slice(ORIGIN.length).match(/^a\/(\d+)\./);
+      const file = m && ASSETS[+m[1]];
+      if (!file) return req.respond({ status: 404, body: '' });
+      req.respond({ status: 200, contentType: MIME[path.extname(file).toLowerCase()], body: fs.readFileSync(file) });
+    });
+    await page.goto(ORIGIN, { waitUntil: 'load', timeout: 0 });
     await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => window.__ready);
     if (errors.length) throw new Error('Engine error: ' + errors.join('\n'));
     const info = await page.evaluate(() => window.__info);
     console.log(`Story: ${S.scenes.length} scenes, ${info.TOTAL.toFixed(1)}s, ${info.W}x${info.H} @ ${info.FPS}fps (${info.frames} frames)`);

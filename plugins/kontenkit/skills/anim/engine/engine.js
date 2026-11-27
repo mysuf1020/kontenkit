@@ -482,8 +482,19 @@
   };
 
   const bgCache = {};
+  const BGI = {};   // image backgrounds by name, filled in the puppet loader below
   function bgFor(sc) {
     const name = sc.bg || 'black';
+    if (BGI[name]) {
+      // image background (story field `backgrounds`): cover-fit, centered horizontally, bottom-aligned
+      if (!bgCache['img|' + name]) {
+        const o = off(LW, LH), im = BGI[name], s = Math.max(LW / im.width, LH / im.height);
+        o.x.imageSmoothingQuality = 'high';
+        o.x.drawImage(im, (LW - im.width * s) / 2, LH - im.height * s, im.width * s, im.height * s);
+        bgCache['img|' + name] = { canvas: o.c, meta: {} };
+      }
+      return bgCache['img|' + name];
+    }
     if (!BG[name]) throw new Error('unknown bg "' + name + '" in scene ' + sc.i);
     const key = [name, sc.tone || S.tone || 'blue', sc.seed || 1, JSON.stringify(sc.moon), sc.passengers, sc.routeSign, sc.houses, sc.boardwalk].join('|');
     if (!bgCache[key]) {
@@ -2596,14 +2607,161 @@
     }
   }
 
+  // ---------- puppets: characters built from image parts ----------
+  // window.PUPPETS[name] (filled by render.mjs from <folder>/<name>/rig.json):
+  //   { heightPx, foot:[x,y], ghost?, head?:'head',
+  //     parts: [{ id, src, off:[x,y], pivot:[x,y], parent?, z }],   // all in source-image pixels
+  //     faces: { neutral|blink|talk|scared|shout|laugh: { src, off:[x,y] } } }   // swaps the head image
+  // Part ids the motion code knows: torso, head, armF/armB (near/far upper arm), foreF/foreB (forearm),
+  // handF/handB, legF/legB (thigh), shinF/shinB, footF/footB. Any of them may be missing.
+  // The art faces right; `face: -1` mirrors it like every other character.
+  const PUP = window.PUPPETS || {};
+  const pupLoads = [];
+  function pupImage(src) {
+    const im = new Image();
+    im.src = src;
+    pupLoads.push(im.decode());
+    return im;
+  }
+  Object.keys(PUP).forEach((name) => {
+    const P = PUP[name];
+    P.byId = {};
+    P.parts.forEach((p) => { p.img = pupImage(p.src); P.byId[p.id] = p; });
+    P.order = P.parts.slice().sort((a, b) => (a.z || 0) - (b.z || 0));
+    Object.keys(P.faces || {}).forEach((k) => { P.faces[k].img = pupImage(P.faces[k].src); });
+    Object.values(P.anims || {}).forEach((a) => a.frames.forEach((fr) => { fr.img = pupImage(fr.src); }));
+    // source px -> logical px at size 1 (a person is ~520 tall); `tall` sets the cast's relative heights
+    P.k = 520 * (P.tall || 1) / P.heightPx;
+  });
+  Object.entries(window.BGIMG || {}).forEach(([name, src]) => { BGI[name] = pupImage(src); });
+  window.__ready = Promise.all(pupLoads).then(() => true);
+
+  const PUP_FACE = { calm: 'neutral', sad: 'neutral', scared: 'scared', shout: 'shout', laugh: 'laugh', sleep: 'blink' };
+  // Procedural pose for one frame. Angles in radians (positive = clockwise, i.e. a limb swings
+  // forward/up toward the way the art faces when negative); offsets in source pixels.
+  function pupPose(ch, k, P) {
+    const t = k.lt + (ch.phase || 0), u = P.heightPx / 520, ang = {};
+    const q = { dx: 0, dy: 0, rot: 0, ang };
+    const act = ch.action || (P.ghost ? 'float' : 'idle');
+    const sw = (id, v) => { ang[id] = (ang[id] || 0) + v; };
+    if (!ch.still) {
+      if (act === 'walk' || act === 'run') {
+        const run = act === 'run', w = t * Math.PI * 2 * (run ? 2.6 : 1.7), sn = Math.sin(w);
+        const leg = run ? 0.62 : 0.27, arm = run ? 0.8 : 0.3;
+        sw('legF', leg * sn); sw('legB', -leg * sn);
+        sw('armF', -arm * sn + (run ? -0.25 : 0)); sw('armB', arm * sn + (run ? -0.25 : 0));
+        // elbows bend forward, knees fold back as each leg passes behind; feet stay roughly level
+        sw('foreF', run ? -0.9 : -0.15 - 0.2 * Math.max(0, sn)); sw('foreB', run ? -0.9 : -0.15 - 0.2 * Math.max(0, -sn));
+        const kF = Math.max(0, Math.sin(w - 0.7)), kB = Math.max(0, Math.sin(w + Math.PI - 0.7)), knee = run ? 1.3 : 0.6;
+        sw('shinF', knee * kF); sw('shinB', knee * kB);
+        sw('footF', -0.6 * knee * kF - leg * sn * 0.4); sw('footB', -0.6 * knee * kB + leg * sn * 0.4);
+        sw('handF', -0.1 * sn); sw('handB', 0.1 * sn);
+        q.dy = -Math.abs(Math.cos(w)) * (run ? 16 : 7) * u;
+        q.rot = run ? 0.16 : 0.03;
+        sw('head', run ? -0.1 : 0.02 * sn);
+      } else if (act === 'hop') {
+        const h = Math.abs(Math.sin(t * Math.PI * 1.4));
+        q.dy = -h * 70 * u; q.rot = 0.03 * Math.sin(t * 4.4);
+      } else if (act === 'float') {
+        q.dy = Math.sin(t * 1.3) * 12 * u; q.rot = 0.025 * Math.sin(t * 0.9);
+      } else {
+        const br = Math.sin(t * 2.2);                     // breathing
+        q.dy = -1.6 * br * u;
+        sw('head', 0.02 * Math.sin(t * 0.8));
+        sw('armF', 0.03 * Math.sin(t * 1.1)); sw('armB', -0.03 * Math.sin(t * 1.1 + 1));
+      }
+      if (act === 'tremble' || ch.tremble) {
+        const j = (n) => hash(t * 31 + n) - 0.5;
+        q.dx += j(1) * 6 * u; sw('head', j(2) * 0.05); sw('armF', j(3) * 0.08); sw('armB', j(4) * 0.08);
+      }
+      // point/reach use the far arm: in a three-quarter view facing right it sits on the facing
+      // side, so it extends away from the body instead of across the chest
+      if (act === 'point') { sw('armB', -1.45 + 0.03 * Math.sin(t * 3)); sw('foreB', -0.18); q.rot += 0.04; }
+      if (act === 'reach') { sw('armB', -2.5 + 0.05 * Math.sin(t * 2)); sw('foreB', -0.3); }
+      if (act === 'cover') { sw('armF', -0.2); sw('foreF', -2.3); sw('armB', 0.2); sw('foreB', 2.3); sw('head', -0.05); q.rot -= 0.05; }
+      if (act === 'look') sw('head', -0.14 * clamp(k.lt / 0.6));
+    }
+    // face: mood picks the base, blinking and talking switch it briefly
+    // `expr` names a face directly (e.g. Amel's 'pos1'…'pos6'); a mood that is itself a face name wins over the map
+    const F = P.faces || {};
+    let face = (ch.expr && F[ch.expr] && ch.expr) || (F[ch.mood] && ch.mood) || PUP_FACE[ch.mood] || ((act === 'run' || act === 'tremble') ? 'scared' : 'neutral');
+    const talk = ch.talk || act === 'talk';
+    if (talk && face === 'neutral') {
+      const mouths = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].filter((m) => P.faces && P.faces[m]);
+      face = mouths.length ? mouths[Math.floor(hash(Math.floor(t * 9) + 7) * mouths.length)] : (hash(Math.floor(t * 9) + 7) > 0.45 ? 'talk' : face);
+    }
+    const blinkOk = face === 'neutral' || face === 'scared';
+    if (blinkOk && ((t + (ch.phase || 0) * 1.7) % 3.4) < 0.13) face = 'blink';
+    q.face = face;
+    return q;
+  }
+  function puppet(c, ch, k) {
+    const P = PUP[ch.name];
+    if (!P) throw new Error('unknown puppet "' + ch.name + '": add its folder to the story field `puppets`');
+    const q = pupPose(ch, k, P);
+    // Drawn frames beat rotated parts for big motions: walk/run play their cycle, a named pose
+    // (point, cover, lookback, phone, backaway, crouch…) shows its still frame with a breath.
+    const A = P.anims || {}, act = ch.action || 'idle';
+    let seq = null, fi = 0;
+    // a sheet named after the action without `names` is a loop (walk, run, float, hop…)
+    if (A[act] && !A[act].names) {
+      seq = A[act];
+      const n = seq.frames.length;
+      // moving walk/run: one cycle (two steps) per 0.8 body heights walked, 1.4 run — the feet stay planted
+      const cyc = act === 'walk' ? 0.8 : act === 'run' ? 1.4 : 0;
+      if (cyc && k.travel != null) fi = Math.floor(k.travel / (cyc * 520 * (P.tall || 1)) * n + (ch.phase || 0) * n) % n;
+      else fi = Math.floor((k.lt + (ch.phase || 0)) * seq.fps) % n;
+    }
+    else for (const a of Object.values(A)) { if (a.names && a.names.indexOf(act) >= 0) { seq = a; fi = a.names.indexOf(act); break; } }
+    if (seq) {
+      if (!seq.k) { const hs = seq.frames.map((f) => f.h).sort((a, b) => a - b); seq.k = 520 * (P.tall || 1) * (seq.scale || 1) / hs[Math.floor(hs.length / 2)]; }
+      const fr = seq.frames[fi];
+      const still = !!seq.names;
+      c.save();
+      c.imageSmoothingQuality = 'high';
+      if (still) c.translate(q.dx, -Math.abs(q.dy) * 0.5);
+      c.scale(seq.k, seq.k);
+      // a still pose of a living character stands on its own soles: frames are cut against the
+      // sheet's lowest foot, so a standing pose next to a crouch would otherwise hover. Ghost poses
+      // and loops (hop, float) keep the sheet baseline, where the height above it is drawn on purpose.
+      c.drawImage(fr.img, fr.off[0], fr.off[1] + (still && !P.ghost ? (fr.foot || 0) : 0));
+      c.restore();
+      return;
+    }
+    const M = {};
+    const tf = (p) => {
+      if (M[p.id]) return M[p.id];
+      const parent = p.parent ? tf(P.byId[p.parent]) : new DOMMatrix();
+      const a = (q.ang[p.id] || 0) + (p.rest || 0);   // rest: base angle, e.g. A-pose arms brought down
+      return (M[p.id] = a ? parent.translate(p.pivot[0], p.pivot[1]).rotate(a * 180 / Math.PI).translate(-p.pivot[0], -p.pivot[1]) : parent);
+    };
+    const faces = P.faces || {};
+    const headId = P.head || 'head';
+    c.save();
+    c.imageSmoothingQuality = 'high';
+    c.scale(P.k, P.k);
+    c.translate(q.dx, q.dy); c.rotate(q.rot);
+    c.translate(-P.foot[0], -P.foot[1]);
+    for (const p of P.order) {
+      let img = p.img, off = p.off;
+      if (p.id === headId) { const f = faces[q.face] || faces.neutral; if (f) { img = f.img; off = f.off; } }
+      const m = tf(p);
+      c.save(); c.transform(m.a, m.b, m.c, m.d, m.e, m.f);
+      c.drawImage(img, off[0], off[1]);
+      c.restore();
+    }
+    c.restore();
+  }
+
   // Draws a character in full color, then tints it with the scene light and adds a rim glow.
   // `light`: 'night' (default), 'warm' (lamp/pelita), 'red', 'none'.
   // Ghost-type characters. A scene is a "horror scene" when it shows one of these, has a
   // jumpscare, a red tone or a heartbeat — or when the scene sets `horror: true/false`.
   const GHOSTS = { ghost: 1, pocong: 1, genderuwo: 1, tuyul: 1, ngesot: 1, banaspati: 1, hand: 1, hair: 1, shadow: 1, eyes: 1, kuyang: 1, wewe: 1, leak: 1, begu: 1, welthok: 1 };
+  const isGhostCh = (ch) => !!(GHOSTS[ch.type] || (ch.type === 'puppet' && PUP[ch.name] && PUP[ch.name].ghost));
   function isHorror(sc) {
     if (sc.horror != null) return !!sc.horror;
-    if (sc._horror == null) sc._horror = !!(sc.scare || sc.tone === 'red' || has(sc, 'heartbeat') || (sc.chars || []).some((ch) => GHOSTS[ch.type]));
+    if (sc._horror == null) sc._horror = !!(sc.scare || sc.tone === 'red' || has(sc, 'heartbeat') || (sc.chars || []).some(isGhostCh));
     return sc._horror;
   }
   // People stay natural (gentle night tint); ghosts get the full drained, shadowed treatment.
@@ -2613,7 +2771,7 @@
     placeFn(sctx);
     sctx.setTransform(1, 0, 0, 1, 0, 0);
     const light = ch.light || 'night';
-    const ghostly = !!GHOSTS[ch.type];
+    const ghostly = isGhostCh(ch);
     if (light !== 'none') {
       sctx.globalCompositeOperation = 'source-atop';
       if (ghostly) {
@@ -2621,6 +2779,7 @@
         sctx.fillRect(0, 0, W, H);
         sctx.fillStyle = 'rgba(62,66,74,0.22)'; sctx.fillRect(0, 0, W, H);          // drain the color
       } else {
+        if (ch.type === 'puppet' && light !== 'warm') { sctx.fillStyle = 'rgba(12,22,48,0.2)'; sctx.fillRect(0, 0, W, H); }
         sctx.fillStyle = light === 'warm' ? 'rgba(255,160,80,0.12)' : light === 'red' ? 'rgba(190,30,20,0.2)' : light === 'under' ? 'rgba(40,60,50,0.25)' : 'rgba(20,30,55,0.1)';
         sctx.fillRect(0, 0, W, H);
       }
@@ -2642,12 +2801,12 @@
     if (blur) c.filter = 'blur(' + blur * SC + 'px)';
     c.drawImage(stage, 0, 0); c.restore();
   }
-  const LIT = { person: 1, baby: 1, dog: 1, jeruju: 1, wewe: 1, welthok: 1 };
+  const LIT = { person: 1, baby: 1, dog: 1, jeruju: 1, wewe: 1, welthok: 1, puppet: 1 };
 
   const CHARS = {
     person, ghost, pocong, shadow: shadowFig, eyes, bus: busSide, angkot: angkotSide, money,
     genderuwo, tuyul, ngesot, banaspati, hand: ghostHand, hair: hangingHair,
-    kuyang, baby, dog, jeruju, wewe, leak, begu, welthok,
+    kuyang, baby, dog, jeruju, wewe, leak, begu, welthok, puppet,
   };
 
   function busPass(sc, lt) {
@@ -2690,8 +2849,26 @@
       c.beginPath(); c.ellipse(0, -260 * s, 70 * s, 260 * s, 0, 0, 7); c.fill();
       c.restore();
     }
-    const kk = { lt, R, pw };
-    if ((ch.type === 'person' && ch.action !== 'drive' && !ch.seated) || ch.type === 'dog' || ch.type === 'wewe' || ch.type === 'welthok' || ch.type === 'begu') {
+    // travel: distance covered so far in the character's own units, so walk/run sprites can step
+    // in time with the movement instead of sliding over the floor
+    const kk = { lt, R, pw, travel: ch.to != null ? Math.abs(x - X(ch.x)) / s : null };
+    if (ch.type === 'puppet' && !isGhostCh(ch) && ch.action !== 'drive' && !ch.seated) {
+      // image characters: a wide soft shadow plus a tight dark core right under the soles, so the
+      // feet read as standing on the floor instead of hovering over it
+      const tl = (PUP[ch.name] && PUP[ch.name].tall) || 1;
+      // In the three-quarter view the far foot stands higher on screen than the near one (whose sole
+      // is the ground line), so the floor under the feet lies just above that line: the shadow is
+      // centred there and barely spills below the near sole — a shadow showing below the shoes
+      // makes the feet look lifted.
+      const sy = y - 11 * s * tl;
+      const blob = (r, ry, a) => {
+        const g = c.createRadialGradient(x, sy, 1, x, sy, r);
+        g.addColorStop(0, 'rgba(0,0,0,' + a * alpha + ')'); g.addColorStop(0.55, 'rgba(0,0,0,' + a * 0.5 * alpha + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
+        c.save(); c.translate(x, sy); c.scale(1, ry / r); c.translate(-x, -sy); c.fillStyle = g; c.beginPath(); c.arc(x, sy, r, 0, 7); c.fill(); c.restore();
+      };
+      blob(130 * s * tl, 17 * s * tl, 0.3);
+      blob(80 * s * tl, 10 * s * tl, 0.6);
+    } else if ((ch.type === 'person' && ch.action !== 'drive' && !ch.seated) || ch.type === 'dog' || ch.type === 'wewe' || ch.type === 'welthok' || ch.type === 'begu') {
       const g = c.createRadialGradient(x, y, 2, x, y, 110 * s);
       g.addColorStop(0, 'rgba(0,0,0,' + 0.6 * alpha + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
       c.save(); c.translate(x, y); c.scale(1, 0.16); c.translate(-x, -y); c.fillStyle = g; c.beginPath(); c.arc(x, y, 110 * s, 0, 7); c.fill(); c.restore();

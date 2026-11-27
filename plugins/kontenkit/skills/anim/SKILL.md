@@ -7,11 +7,14 @@ description: Bikin video animasi horor pendek 9:16 berbahasa Indonesia (±90 det
 
 Mengubah ide cerita horor menjadi video MP4 9:16 lewat tiga tahap: **naskah → file story → render**.
 Engine menggambar semuanya dengan kode (canvas di Chrome headless), jadi tidak perlu aset gambar.
+Kalau user punya aset gambar sendiri, engine juga bisa memakai **karakter gambar (puppet)** yang dipotong dari sheet green screen dan **latar gambar** (PNG/JPG 9:16) — lihat `references/puppets.md`.
 
 Base directory skill ini (tempat SKILL.md berada) berisi:
 - `scripts/render.mjs` — renderer (butuh `npm install` sekali di `scripts/`)
+- `scripts/puppet-cut.mjs` — memotong sheet karakter green screen jadi puppet (`rig.json` + PNG)
 - `engine/engine.js` — engine gambar; jangan diubah untuk satu video, cukup tulis file story
 - `references/story-schema.md` — **semua** opsi scene, latar, karakter, efek, dan suara. Baca sebelum menulis story.
+- `references/puppets.md` — aset karakter gambar: format sheet, spec potong, cek hasil, dan cara pakai di story. Baca sebelum memakai atau membuat puppet.
 - `references/horror-writing.md` — struktur cerita, hook, dan aturan teks. Baca sebelum menulis naskah.
 - `examples/rumah-kosong.js` — contoh story lengkap yang sudah teruji
 

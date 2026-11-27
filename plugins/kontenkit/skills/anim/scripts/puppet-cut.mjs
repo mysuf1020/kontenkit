@@ -74,24 +74,6 @@ window.keyGreen = (img) => {
   x.putImageData(d, 0, 0);
   return c;
 };
-// Head width relative to figure height: median opaque width over the rows 2–9% below the top of
-// the figure (across the skull). Sheets are drawn at different scales (a striding or crouching
-// figure is shorter but its head isn't), so matching this ratio keeps the head the same size.
-window.headRatio = (c, box) => {
-  const [bx, by, bw, bh] = box || [0, 0, c.width, c.height];
-  const d = c.getContext('2d').getImageData(bx, by, bw, bh).data;
-  let top = -1;
-  for (let y = 0; y < bh && top < 0; y++) for (let x = 0; x < bw; x++) if (d[(y * bw + x) * 4 + 3] > 100) { top = y; break; }
-  if (top < 0) return 0;
-  let bot = top; for (let y = bh - 1; y > top; y--) { let hit = false; for (let x = 0; x < bw; x++) if (d[(y * bw + x) * 4 + 3] > 100) { hit = true; break; } if (hit) { bot = y; break; } }
-  const h = bot - top + 1, ws = [];
-  for (let y = top + Math.round(h * 0.02); y < top + Math.round(h * 0.09); y++) {
-    let x0 = -1, x1 = -1; for (let x = 0; x < bw; x++) if (d[(y * bw + x) * 4 + 3] > 100) { if (x0 < 0) x0 = x; x1 = x; }
-    if (x0 >= 0) ws.push(x1 - x0);
-  }
-  ws.sort((a, b) => a - b);
-  return (ws[ws.length >> 1] || 0) / h;
-};
 window.polyPath =(x, poly) => { x.beginPath(); poly.forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b))); x.closePath(); };
 window.alphaBox = (c) => {
   const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
@@ -268,10 +250,9 @@ async function cut(specFile, outDir) {
           const top = canvas(b[2] + 8, Math.round(b[3] * 0.35)); top.getContext('2d').drawImage(c, 0, 0);
           const tb = alphaBox(top) || [0, 0, c.width, 0];
           const cx = b[0] - 4 + tb[0] + tb[2] / 2;
-          return { url: c.toDataURL('image/png'), off: [b[0] - 4 - cx, b[1] - 4 - base], h: b[3], foot: base - (b[1] + b[3]), ratio: headRatio(c) };
+          return { url: c.toDataURL('image/png'), off: [b[0] - 4 - cx, b[1] - 4 - base], h: b[3], foot: base - (b[1] + b[3]) };
         });
       }
-      out.baseRatio = headRatio(keyed, alphaBox(keyed));
       // debug overlay: keyed figure on grey, part outlines and pivots
       const dbg = canvas(W, H), dx = dbg.getContext('2d');
       dx.fillStyle = '#777'; dx.fillRect(0, 0, W, H); dx.drawImage(keyed, 0, 0);
@@ -308,11 +289,11 @@ async function cut(specFile, outDir) {
     rig.anims = {};
     for (const [name, frames] of Object.entries(res.anims || {})) {
       const A = spec.anims[name];
-      // scale: the engine sizes a sheet by its median frame height; this corrects it so the head
-      // comes out as big as on the base body (explicit `scale` in the spec wins)
-      const rs = frames.map((f) => f.ratio).filter(Boolean).sort((a, b) => a - b), r = rs[rs.length >> 1];
-      const auto = r && res.baseRatio ? +(res.baseRatio / r).toFixed(3) : 1;
-      rig.anims[name] = { fps: A.fps || 10, scale: A.scale || auto, names: A.names, loop: A.loop !== false, frames: frames.map((fr, i) => {
+      // scale: the engine sizes a sheet so its median frame is this fraction of the standing body,
+      // the same rule for every character: a stride is a little shorter than standing, a running
+      // lean shorter still, poses and other loops stand full height (explicit `scale` wins)
+      const SHEET_HEIGHT = { walk: 0.97, run: 0.9 };
+      rig.anims[name] = { fps: A.fps || 10, scale: A.scale || SHEET_HEIGHT[name] || 1, names: A.names, loop: A.loop !== false, frames: frames.map((fr, i) => {
         const file = 'anim-' + name + '-' + i + '.png';
         save(path.join(dest, file), fr.url);
         return { src: file, off: fr.off, h: fr.h, foot: fr.foot };

@@ -44,7 +44,7 @@ Semua koordinat dalam piksel gambar sumber; path relatif ke file spec.
 - `foot` — titik tanah di antara telapak kaki (tengah lebar kaki, dasar sol).
 - `parts.head.poly` — area kepala + leher sampai kerah. Baca koordinatnya dari grid: `node puppet-cut.mjs <gambar> --grid --step 50`. `pivot` = pangkal leher. `joint` = radius badan yang tetap utuh di sekitar leher. `keep` = tinggi pita bawah poligon yang tetap tinggal di badan, supaya tidak muncul celah kalau wajah pengganti lebih sempit (hijab, kerah). Untuk hantu tanpa leher jelas (genderuwo), `keep` setinggi poligon = kepala asli tetap ada di bawah wajah pengganti.
 - `faces` — kepala-kepala diurutkan kiri→kanan, atas→bawah sesuai `order`, lalu diskalakan supaya lebar bagian atas kepala sama dengan kepala badan dasar. `ref` = kepala acuan skala (default `neutral`).
-- `anims` — sheet tanpa `names` = siklus gerak (nama siklus = nama action: `walk`, `run`, `float`, `hop`…); sheet dengan `names` = pose diam bernama. `scale` dihitung otomatis dari ukuran kepala supaya karakter tidak membesar/mengecil saat ganti sheet. Isi manual hanya kalau hitungan otomatis meleset (mis. sheet yang posenya rebahan/miring: `"scale": 1`).
+- `anims` — sheet tanpa `names` = siklus gerak (nama siklus = nama action: `walk`, `run`, `float`, `hop`…); sheet dengan `names` = pose diam bernama. Standar tinggi sama untuk semua karakter: frame tengah (median) sheet `walk` = 97% tinggi berdiri, `run` = 90% (badan condong), sheet lain = 100%. Tiap frame jalan/lari juga disamakan tingginya, supaya badan tidak berdenyut saat melangkah. Jadi karakter tidak membesar/mengecil saat berganti dari diam ke jalan atau pose. Isi `scale` manual hanya untuk sheet yang frame tengahnya bukan figur berdiri (mis. kebanyakan pose jongkok/rebahan).
 - `tall` — tinggi relatif terhadap pria dewasa (1.0). Atur supaya pasangan karakter terlihat wajar berdampingan (mis. puncak kepala Amel setinggi hidung–mulut Yusuf ⇒ 0.88).
 - `ghost: true` — dihitung hantu: scene jadi horor otomatis, tanpa bayangan kaki, default melayang.
 
@@ -54,11 +54,11 @@ Semua koordinat dalam piksel gambar sumber; path relatif ke file spec.
 node <skill-dir>/scripts/puppet-cut.mjs <folder-aset>/<nama>/rig-spec.json --out <folder-puppets>
 ```
 
-Hasilnya `<folder-puppets>/<nama>/` berisi `rig.json`, PNG potongan, `face-*.png`, `anim-*.png`, dan `_debug.png` (badan di atas abu-abu + garis poligon). Baris `anim scale:` di output menunjukkan skala tiap sheet; nilai jauh dari 0.8–1.1 biasanya tanda pose rebahan/terpotong yang perlu `scale` manual.
+Hasilnya `<folder-puppets>/<nama>/` berisi `rig.json`, PNG potongan, `face-*.png`, `anim-*.png`, dan `_debug.png` (badan di atas abu-abu + garis poligon). Baris `anim scale:` di output menunjukkan skala tiap sheet.
 
 Cek sebelum dipakai:
 1. Semua ekspresi ditempel di badan dasar: tidak ada celah abu-abu di leher, rambut/hijab tidak terpotong.
-2. Frame siklus berurutan dan ukurannya konsisten.
+2. Frame siklus berurutan, dan tinggi badan sama saat diam, jalan, lari, dan pose (taruh beberapa versi karakter berjajar dalam satu still).
 3. Render story tes pendek dengan latar sungguhan (`--stills` lalu `--no-audio`) dan lihat kaki: harus napak di lantai.
 
 ## 4. Di story

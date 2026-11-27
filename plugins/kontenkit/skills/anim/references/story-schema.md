@@ -18,6 +18,8 @@ window.STORY = {
 
 **Latar gambar.** Kalau `backgrounds` diisi, `bg` sebuah scene boleh berupa nama file gambar di folder itu tanpa ekstensi (mis. `bg: 'koridor-gedung-c'` untuk `koridor-gedung-c.png`). Gambar ditarik penuh (cover) ke 1080×1920, rata bawah. Pakai gambar potret 9:16 yang lantainya mengisi ±35% bawah, karena garis kaki karakter ada di `y = 1350`. Nama yang tidak ditemukan sebagai file tetap dicari di latar bawaan di bawah. Gambar tidak diwarnai ulang per tone, jadi pakai versi gambar yang sesuai waktunya (mis. `warung-siang`). Kalau scene-nya siang/aman, isi `horror: false`.
 
+**Skala latar gambar (`bg.json`).** Taruh `bg.json` di folder latar: `{ "<nama>": { "horizon": 1000, "person": 560 } }`. `person` = tinggi orang dewasa (px logis) dengan kaki di `y = 1350`; `horizon` = garis tempat orang mengecil jadi nol (titik hilang lantai). Puppet di latar itu otomatis berukuran sesuai pintu dan perabot, dan makin kecil kalau `y`-nya lebih kecil (lebih jauh). `size` puppet lalu hanya pengali (biarkan 1). Renderer memberi peringatan untuk latar gambar tanpa skala. Cara kalibrasi ada di `puppets.md`.
+
 Hanya data (tanpa fungsi). Koordinat memakai kanvas logis **1080 × 1920**. `x` boleh pecahan 0–1 (lebar layar) atau piksel. Garis tanah karakter: `y = 1350`.
 
 ## Scene

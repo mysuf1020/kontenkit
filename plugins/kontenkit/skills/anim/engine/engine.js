@@ -2834,6 +2834,12 @@
     if (ch.to != null) x = lerp(X(ch.x), X(ch.to), ch.action === 'approach' ? ease(pw) : pw);
     let y = ch.y != null ? ch.y : (ch.type === 'eyes' || ch.type === 'banaspati' || ch.type === 'kuyang' || ch.type === 'leak') ? 900 : ch.type === 'hair' ? 0 : GY;
     let s = (ch.size || 1) * (ch.type === 'eyes' ? 1.8 : 1);
+    // Image backgrounds with a scale (bg.json): a puppet's height comes from the picture's
+    // perspective — `person` px tall (a 1.0 adult) with feet on y = 1350, shrinking linearly to
+    // nothing at the `horizon` — so it matches the doors and furniture and gets smaller further
+    // back (smaller `y`). `size` then only adjusts that.
+    const bgs = ch.type === 'puppet' && (window.BGSCALE || {})[sc.bg];
+    if (bgs) s *= (bgs.person / 520) * Math.max(0.05, (y - bgs.horizon) / (GY - bgs.horizon));
     if (ch.action === 'approach') { const q = ease(pw); s *= lerp(1, ch.grow || 1.8, q); y += lerp(0, ch.type === 'eyes' ? 120 : 280, q); }
     // Only a number is a facing direction; `hair` and `banaspati` use a boolean `face` to toggle their face.
     const face = typeof ch.face === 'number' ? ch.face : (ch.to != null && X(ch.to) < X(ch.x) ? -1 : 1);

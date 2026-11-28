@@ -317,9 +317,12 @@ const EL_TAG = {
   sigh: 'sighs', sighs: 'sighs', gasp: 'gasps', breath: 'inhales', exhales: 'exhales', cry: 'crying',
   sob: 'sobbing', cough: 'coughs', yawn: 'yawns', 'throat-clearing': 'clears throat',
 };
-export function toElevenText(text, style) {
-  const lead = style.map((w) => `[${EL_TAG[w] || w}]`).join(' ');
-  const body = text.replace(/<([^<>]+)>/g, (_, t) => (/pause$/.test(t) ? '...' : `[${EL_TAG[t] || t}]`));
+// Only eleven_v3 understands [audio tags]; older models (multilingual_v2, flash, turbo) read them
+// aloud, so for those the tags are dropped and only the words (plus pause ellipses) are sent.
+export function toElevenText(text, style, model = EL_DEFAULT_MODEL) {
+  const tags = /^eleven_v3/.test(model);
+  const lead = tags ? style.map((w) => `[${EL_TAG[w] || w}]`).join(' ') : '';
+  const body = text.replace(/<([^<>]+)>/g, (_, t) => (/pause$/.test(t) ? '...' : tags ? `[${EL_TAG[t] || t}]` : ''));
   return `${lead} ${body}`.replace(/\s+/g, ' ').trim();
 }
 
@@ -455,7 +458,7 @@ async function generate(opts) {
     console.log(`\nStyle dasar:\n  ${style}\n`);
     segs.forEach((s, i) => {
       if (s.silence !== undefined) console.log(`${String(i + 1).padStart(2)}. [jeda ${s.silence.toFixed(2)} dtk]`);
-      else console.log(`${String(i + 1).padStart(2)}. ${eleven ? toElevenText(s.text, s.style) : `(${s.style.join(', ') || 'style dasar'}) ${s.text}`}`);
+      else console.log(`${String(i + 1).padStart(2)}. ${eleven ? toElevenText(s.text, s.style, model) : `(${s.style.join(', ') || 'style dasar'}) ${s.text}`}`);
     });
     return;
   }
@@ -472,7 +475,7 @@ async function generate(opts) {
   for (const s of segs) {
     if (s.silence !== undefined) { push(silencePcm(s.silence)); continue; }
     n++;
-    const fullStyle = eleven ? toElevenText(s.text, s.style) : styleFor(style, s.style);
+    const fullStyle = eleven ? toElevenText(s.text, s.style, model) : styleFor(style, s.style);
     const hash = createHash('sha256').update(JSON.stringify([eleven ? 'el' : 'g', model, voice, fullStyle, s.text])).digest('hex').slice(0, 16);
     const cached = join(cacheDir, `${hash}.pcm`);
     let pcm;

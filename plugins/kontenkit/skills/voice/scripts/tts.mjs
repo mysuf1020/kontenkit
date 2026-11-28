@@ -6,6 +6,11 @@
 //                [--model gemini-3.8-flash-tts] [--style "..."] [--gap 0.2] [--dry-run] [--no-cache]
 //   node tts.mjs clone --source sampel.wav --consent persetujuan.wav [--name "Suara Saya"]
 //
+// ElevenLabs (ELEVENLABS_API_KEY):
+//   node tts.mjs voices [--search kata]                                  -> voice IDs in the account + credits
+//   node tts.mjs cast <vo-generate.md> --voices voices.json --engine elevenlabs [--dir out]  -> one take per character
+//   node tts.mjs <naskah.md> --engine elevenlabs --voice <voice_id> [--model eleven_v3] [--out x.wav]
+//
 // Manual mode (Google AI Studio web, free, no API key):
 //   node tts.mjs prep <naskah.md> [--dir folder] [--voice Nama]   -> potongan.md + rencana.json
 //   node tts.mjs stitch <folder> [file1 file2 ...] [--out narasi.mp3] [--gap 0.4]
@@ -274,6 +279,107 @@ function apiKey() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ---------- ElevenLabs (--engine elevenlabs) ----------
+
+const EL_API = 'https://api.elevenlabs.io/v1';
+const EL_DEFAULT_MODEL = 'eleven_v3';
+
+function elKey() {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) die('ELEVENLABS_API_KEY belum di-set. Buat key di https://elevenlabs.io/app/settings/api-keys lalu set environment variable ELEVENLABS_API_KEY.');
+  return key;
+}
+
+async function elFetch(path, { method = 'GET', body, key, raw = false } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${EL_API}${path}`, {
+      method,
+      headers: { 'xi-api-key': key, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.ok) return raw ? Buffer.from(await res.arrayBuffer()) : res.json();
+    const text = await res.text();
+    let msg = text.slice(0, 500);
+    try { const j = JSON.parse(text); msg = j?.detail?.message || j?.detail?.status || msg; } catch { /* keep raw text */ }
+    const retryable = res.status === 429 || res.status >= 500;
+    if (!retryable || attempt >= 4) throw new Error(`ElevenLabs HTTP ${res.status}: ${msg}`);
+    const waitS = 5 * 2 ** attempt;
+    console.error(`  HTTP ${res.status}, coba lagi dalam ${waitS} dtk...`);
+    await sleep(waitS * 1000);
+  }
+}
+
+// Script tags (AI Studio style) -> ElevenLabs v3 audio tags. Delivery words from the line start
+// become a leading [tag]; inline vocal sounds become [sound]; pauses become an ellipsis.
+const EL_TAG = {
+  whispering: 'whispers', whispers: 'whispers', shout: 'shouts', shouting: 'shouts', yelling: 'shouts',
+  laugh: 'laughs', laughter: 'laughs', chuckle: 'chuckles', chuckles: 'chuckles', giggle: 'giggles',
+  sigh: 'sighs', sighs: 'sighs', gasp: 'gasps', breath: 'inhales', exhales: 'exhales', cry: 'crying',
+  sob: 'sobbing', cough: 'coughs', yawn: 'yawns', 'throat-clearing': 'clears throat',
+};
+export function toElevenText(text, style) {
+  const lead = style.map((w) => `[${EL_TAG[w] || w}]`).join(' ');
+  const body = text.replace(/<([^<>]+)>/g, (_, t) => (/pause$/.test(t) ? '...' : `[${EL_TAG[t] || t}]`));
+  return `${lead} ${body}`.replace(/\s+/g, ' ').trim();
+}
+
+async function synthEleven({ text, voice, model, key }) {
+  const settings = model === 'eleven_v3' ? { stability: 0.5 } : { stability: 0.45, similarity_boost: 0.8, style: 0.3 };
+  // pcm_24000 = raw 16-bit mono at the same rate the rest of this script works in
+  return elFetch(`/text-to-speech/${encodeURIComponent(voice)}?output_format=pcm_24000`, {
+    method: 'POST', key, raw: true,
+    body: { text, model_id: model, language_code: 'id', voice_settings: settings },
+  });
+}
+
+// node tts.mjs cast <vo-generate.md> --voices voices.json [--dir out] [--engine elevenlabs|gemini] [--dry-run]
+// A multi-character VO file: one "## <Character>" section per character, each with a
+// "**Simpan sebagai:** `.../<key>.wav`" line and its own "### Script Voice Over" (+ optional
+// "### Style instructions"). voices.json maps <key> -> voice id/name. Writes <dir>/<key>.wav (+ .srt).
+async function cast(opts) {
+  const input = opts._[1];
+  if (!input || !opts.voices) die('pakai: node tts.mjs cast <vo-generate.md> --voices voices.json [--dir folder] [--engine elevenlabs]');
+  if (!existsSync(input)) die(`file tidak ada: ${input}`);
+  const map = JSON.parse(readFileSync(opts.voices, 'utf8'));
+  const dir = resolve(opts.dir || dirname(input));
+  const md = readFileSync(input, 'utf8');
+  const parts = md.split(/^##\s+(?!#)/m).slice(1);
+  let done = 0;
+  for (const part of parts) {
+    const key = /Simpan sebagai:\*\*\s*`[^`]*?([\w-]+)\.wav`/.exec(part)?.[1];
+    if (!key) continue;
+    if (!map[key]) die(`voices.json belum punya suara untuk "${key}"`);
+    const vo = /^###\s+Script Voice Over\s*$([\s\S]*?)(?=^###\s|$(?![\s\S]))/m.exec(part)?.[1];
+    const st = /^###\s+Style instructions\s*$([\s\S]*?)(?=^###\s|$(?![\s\S]))/m.exec(part)?.[1];
+    if (!vo) die(`bagian "${key}" tidak punya ### Script Voice Over`);
+    const tmp = join(tmpdir(), `vo-cast-${process.pid}-${key}.md`);
+    const strip = (s) => s.replace(/^-{3,}\s*$/gm, '');   // section separators are not part of the text
+    writeFileSync(tmp, `## Script Voice Over\n${strip(vo)}\n${st ? `## Style instructions\n${strip(st)}\n` : ''}`);
+    console.log(`\n=== ${key} (${map[key]})`);
+    try {
+      await generate({ ...opts, _: [tmp], voice: map[key], out: join(dir, `${key}.wav`) });
+    } finally {
+      rmSync(tmp, { force: true });
+    }
+    done++;
+  }
+  if (!done) die('tidak ada bagian karakter (## Nama + "Simpan sebagai: `...<key>.wav`") di file ini');
+}
+
+// node tts.mjs voices [--search kata]  -> voices in the account (id, name, labels) + remaining credits
+async function voices(opts) {
+  const key = elKey();
+  const sub = await elFetch('/user/subscription', { key });
+  console.log(`Paket: ${sub.tier} · kredit terpakai ${sub.character_count} / ${sub.character_limit} · reset ${new Date(sub.next_character_count_reset_unix * 1000).toLocaleDateString('id-ID')}\n`);
+  const q = opts.search ? `?search=${encodeURIComponent(opts.search)}` : '';
+  const { voices: list } = await elFetch(`/voices${q}`, { key });
+  for (const v of list) {
+    const l = v.labels || {};
+    console.log(`${v.voice_id}  ${v.name}  (${[l.gender, l.age, l.accent, l.language, v.category].filter(Boolean).join(', ')})`);
+  }
+  console.log(`\n${list.length} suara. Pakai: node tts.mjs <naskah.md> --engine elevenlabs --voice <voice_id>`);
+}
+
 async function post(path, body, key) {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${API}/${path}`, {
@@ -327,8 +433,11 @@ async function generate(opts) {
   if (!input) die('pakai: node tts.mjs <naskah.md|.txt> [--out narasi.wav|.mp3] [--voice Nama] [--dry-run]');
   if (!existsSync(input)) die(`file tidak ada: ${input}`);
   const out = resolve(opts.out || join(dirname(input), basename(input, extname(input)) + '.vo.wav'));
+  const eleven = (opts.engine || 'gemini').toLowerCase() === 'elevenlabs';
+  if (!eleven && opts.engine && opts.engine.toLowerCase() !== 'gemini') die('--engine harus gemini atau elevenlabs');
+  if (eleven && !opts.voice) die('--engine elevenlabs butuh --voice <voice_id> (lihat: node tts.mjs voices)');
   const voice = opts.voice || DEFAULT_VOICE;
-  const model = opts.model || DEFAULT_MODEL;
+  const model = opts.model || (eleven ? EL_DEFAULT_MODEL : DEFAULT_MODEL);
   const gap = opts.gap !== undefined ? Number(opts.gap) : 0.2;
   if (!Number.isFinite(gap) || gap < 0) die('--gap harus angka >= 0');
 
@@ -338,7 +447,7 @@ async function generate(opts) {
   const speech = segs.filter((s) => s.text !== undefined);
   if (!speech.length) die('tidak ada teks yang bisa dibacakan di naskah');
 
-  console.log(`Model: ${model} · Suara: ${voice} · Style: ${opts.style ? '--style' : styleFromFile ? 'dari file' : 'default horor'}`);
+  console.log(`${eleven ? 'ElevenLabs' : 'Gemini'} · Model: ${model} · Suara: ${voice}${eleven ? ' (style instructions tidak dipakai; karakter suara dari voice-nya, ekspresi dari tag)' : ` · Style: ${opts.style ? '--style' : styleFromFile ? 'dari file' : 'default horor'}`}`);
   console.log(`Segmen: ${speech.length} permintaan TTS, ${segs.length - speech.length} jeda`);
   warnings.forEach((w) => console.warn(`  peringatan: ${w}`));
 
@@ -346,12 +455,12 @@ async function generate(opts) {
     console.log(`\nStyle dasar:\n  ${style}\n`);
     segs.forEach((s, i) => {
       if (s.silence !== undefined) console.log(`${String(i + 1).padStart(2)}. [jeda ${s.silence.toFixed(2)} dtk]`);
-      else console.log(`${String(i + 1).padStart(2)}. (${s.style.join(', ') || 'style dasar'}) ${s.text}`);
+      else console.log(`${String(i + 1).padStart(2)}. ${eleven ? toElevenText(s.text, s.style) : `(${s.style.join(', ') || 'style dasar'}) ${s.text}`}`);
     });
     return;
   }
 
-  const key = apiKey();
+  const key = eleven ? elKey() : apiKey();
   const cacheDir = join(dirname(out), '.vo-cache');
   if (!opts['no-cache']) mkdirSync(cacheDir, { recursive: true });
 
@@ -363,8 +472,8 @@ async function generate(opts) {
   for (const s of segs) {
     if (s.silence !== undefined) { push(silencePcm(s.silence)); continue; }
     n++;
-    const fullStyle = styleFor(style, s.style);
-    const hash = createHash('sha256').update(JSON.stringify([model, voice, fullStyle, s.text])).digest('hex').slice(0, 16);
+    const fullStyle = eleven ? toElevenText(s.text, s.style) : styleFor(style, s.style);
+    const hash = createHash('sha256').update(JSON.stringify([eleven ? 'el' : 'g', model, voice, fullStyle, s.text])).digest('hex').slice(0, 16);
     const cached = join(cacheDir, `${hash}.pcm`);
     let pcm;
     if (!opts['no-cache'] && existsSync(cached)) {
@@ -373,7 +482,7 @@ async function generate(opts) {
     } else {
       console.log(`  [${n}/${speech.length}] TTS    ${s.text.slice(0, 60)}`);
       try {
-        pcm = await synth({ text: s.text, style: fullStyle, voice, model, key });
+        pcm = eleven ? await synthEleven({ text: fullStyle, voice, model, key }) : await synth({ text: s.text, style: fullStyle, voice, model, key });
       } catch (e) {
         die(`segmen ${n} gagal — ${e.message}\nSegmen yang sudah jadi tersimpan di cache; jalankan ulang untuk melanjutkan.`);
       }
@@ -863,6 +972,6 @@ async function clone(opts) {
 const isMain = process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2));
-  const run = { clone, prep, stitch, align }[opts._[0]] ?? generate;
+  const run = { clone, prep, stitch, align, voices, cast }[opts._[0]] ?? generate;
   run(opts).catch((e) => die(e.message));
 }

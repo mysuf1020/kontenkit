@@ -1,6 +1,6 @@
 ---
 name: voice
-description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script. Mode satu take (default, gratis tanpa API key): user menempel seluruh naskah ke Google AI Studio Generate Speech, lalu satu file audionya dirapikan (volume seragam, hening dipotong) dan diberi subtitle .srt yang sinkron lewat whisper; mode potongan memecah naskah jadi bagian siap tempel lalu menggabungkannya; mode otomatis me-render langsung lewat Gemini API. Hasilnya siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini atau suara user sendiri (voice replication, Gemini API paid tier). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
+description: Mengubah naskah voice-over (VO) horor berbahasa Indonesia jadi file audio narasi (.wav/.mp3) — user cukup menempel Script Voice Over bertag ekspresi (<calm>, <whispering>, <gasp>, <short pause>, dst.) atau memberi file .md hasil skill script. Mode satu take (default, gratis tanpa API key): user menempel seluruh naskah ke Google AI Studio Generate Speech, lalu satu file audionya dirapikan (volume seragam, hening dipotong) dan diberi subtitle .srt yang sinkron lewat whisper; mode potongan memecah naskah jadi bagian siap tempel lalu menggabungkannya; mode otomatis me-render langsung lewat Gemini API. Hasilnya siap dipasang ke video lewat `anim --voice`. Bisa memakai 30 suara bawaan Gemini, suara user sendiri (voice replication, Gemini API paid tier), atau suara ElevenLabs (`--engine elevenlabs`, termasuk file banyak karakter lewat `cast`). Gunakan setiap kali user minta voice over, VO, narasi suara, TTS, "suarain naskah ini", "bikin audionya", "jadiin mp3", atau ingin memakai suaranya sendiri untuk narasi konten horor.
 ---
 
 # voice (kontenkit)
@@ -12,8 +12,9 @@ Naskah VO masuk, file audio narasi keluar. Skrip `scripts/tts.mjs` membaca tag e
 | **Satu take** (default) | User menempel seluruh Script Voice Over + Style instructions dari naskah ke Google AI Studio sekaligus, lalu memberi satu file audio. Paling sedikit langkah untuk user. | Node 18+, ffmpeg; model whisper untuk subtitle presisi |
 | **Potongan** | User mau mengulang bagian tertentu saja, atau satu take terlalu panjang untuk AI Studio. | Node 18+, ffmpeg |
 | **Otomatis (API)** | User minta langsung jadi tanpa copy-paste, atau sudah punya `GEMINI_API_KEY` dan memintanya. | Node 18+, `GEMINI_API_KEY`, ffmpeg untuk mp3 |
+| **ElevenLabs** | User langganan ElevenLabs dan minta VO dari sana (suara lebih banyak, bisa clone suara sendiri). | Node 18+, `ELEVENLABS_API_KEY` |
 
-Pakai mode satu take kecuali user meminta potongan atau API. Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/biaya, atau ingin memakai suaranya sendiri.
+Pakai mode satu take kecuali user meminta potongan, API, atau ElevenLabs. Baca `references/suara-gemini.md` kalau user bertanya soal pilihan suara, kuota/biaya, atau ingin memakai suaranya sendiri.
 
 ## Mode satu take (Google AI Studio, gratis)
 
@@ -91,6 +92,24 @@ Batas: whisper base sering salah dengar suara berbisik, jadi kata yang sangat pe
 5. **Laporkan** path audio dan SRT, durasi, suara yang dipakai, dan jumlah segmen. Tawarkan langkah lanjut: pasang ke video dengan skill `anim` (`--voice narasi.mp3` — SRT di sebelahnya otomatis jadi subtitle), atau ganti suara/style kalau hasilnya kurang pas.
 
 Kalau render gagal di tengah, segmen yang sudah jadi tersimpan di `.vo-cache/` di samping file output — jalankan ulang perintah yang sama dan hanya segmen yang belum jadi yang diminta ulang. Mengubah satu baris naskah juga hanya me-render ulang baris itu.
+
+## Mode ElevenLabs
+
+### Syarat (cek sekali)
+- User punya akun dan langganan ElevenLabs (paket gratis tidak boleh dipakai komersial). Akun, pembayaran, dan pembuatan API key dilakukan user sendiri.
+- **`ELEVENLABS_API_KEY`** di environment. Jangan pernah meminta user menempel key ke chat atau menulisnya ke file. Arahkan user membuat key di https://elevenlabs.io/app/settings/api-keys lalu menjalankan sendiri di terminal:
+  ```powershell
+  setx ELEVENLABS_API_KEY "key-kamu"
+  ```
+  lalu membuka ulang terminal / Claude.
+
+### Alur kerja
+1. **Pilih suara.** `node <skill-dir>/scripts/tts.mjs voices [--search indonesian]` menampilkan sisa kredit dan voice ID di akun (suara dari Voice Library harus ditambahkan ke akun dulu di web). Bantu user memilih suara per karakter, lalu simpan peta karakter → voice ID di `voices.json` folder kerja, mis. `{ "yusuf": "<id>", "amel": "<id>" }`.
+2. **Satu naskah, satu suara:** `node tts.mjs <naskah.md> --engine elevenlabs --voice <voice_id> [--out x.wav]` (model default `eleven_v3`; `--model eleven_multilingual_v2` kalau v3 kurang cocok).
+3. **File banyak karakter** (bagian `## <Karakter>` dengan baris `**Simpan sebagai:** \`.../<key>.wav\`` dan `### Script Voice Over` sendiri): `node tts.mjs cast <file.md> --voices voices.json --engine elevenlabs --dir <folder>` menghasilkan `<key>.wav` + `.srt` per karakter. Selalu `--dry-run` dulu untuk memeriksa teks yang dikirim.
+4. Hemat kredit: kalimat yang sudah jadi disimpan di `.vo-cache`, jadi menjalankan ulang setelah mengedit satu baris hanya membayar baris itu. Kredit ≈ jumlah karakter teks.
+
+Bedanya dengan Gemini: ElevenLabs tidak membaca Style instructions. Karakter suara datang dari voice yang dipilih; emosi datang dari tag naskah, yang diubah jadi audio tag v3 (`<whispering>` → `[whispers]`, `<laugh>` → `[laughs]`, tag emosi lain → `[tag]`, jeda di tengah kalimat → `...`). Jeda di baris sendiri tetap jadi hening dengan durasi pasti.
 
 ## Cara skrip membaca tag
 

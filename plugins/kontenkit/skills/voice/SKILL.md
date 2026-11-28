@@ -106,6 +106,7 @@ Kalau render gagal di tengah, segmen yang sudah jadi tersimpan di `.vo-cache/` d
 ### Alur kerja
 1. **Pilih suara.** `node <skill-dir>/scripts/tts.mjs voices [--search indonesian]` menampilkan sisa kredit dan voice ID di akun (suara dari Voice Library harus ditambahkan ke akun dulu di web). Bantu user memilih suara per karakter, lalu simpan peta karakter → voice ID di `voices.json` folder kerja, mis. `{ "yusuf": "<id>", "amel": "<id>" }`.
 2. **Satu naskah, satu suara:** `node tts.mjs <naskah.md> --engine elevenlabs --voice <voice_id> [--out x.wav]` (model default `eleven_v3`; `--model eleven_multilingual_v2` kalau v3 kurang cocok).
+   - **Logat (v3):** suara clone di v3 bisa geser logat (mis. jadi kedengaran Jawa). `--accent "casual Jakarta accent"` menempel tag logat itu di depan setiap kalimat (tiap kalimat dikirim terpisah, jadi tag di baris pertama saja tidak cukup). `--lang auto` tidak mengirim kode bahasa, supaya model mengikuti logat sampel suaranya; default `id`. Model selain v3 mengabaikan `--accent`.
 3. **File banyak karakter** (bagian `## <Karakter>` dengan baris `**Simpan sebagai:** \`.../<key>.wav\`` dan `### Script Voice Over` sendiri): `node tts.mjs cast <file.md> --voices voices.json --engine elevenlabs --dir <folder>` menghasilkan `<key>.wav` + `.srt` per karakter. Selalu `--dry-run` dulu untuk memeriksa teks yang dikirim.
 4. Hemat kredit: kalimat yang sudah jadi disimpan di `.vo-cache`, jadi menjalankan ulang setelah mengedit satu baris hanya membayar baris itu. Kredit ≈ jumlah karakter teks.
 

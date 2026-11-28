@@ -9,7 +9,7 @@
 // ElevenLabs (ELEVENLABS_API_KEY):
 //   node tts.mjs voices [--search kata]                                  -> voice IDs in the account + credits
 //   node tts.mjs cast <vo-generate.md> --voices voices.json --engine elevenlabs [--dir out]  -> one take per character
-//   node tts.mjs <naskah.md> --engine elevenlabs --voice <voice_id> [--model eleven_v3] [--out x.wav]
+//   node tts.mjs <naskah.md> --engine elevenlabs --voice <voice_id> [--model eleven_v3] [--accent "casual Jakarta accent"] [--lang id|auto] [--out x.wav]
 //
 // Manual mode (Google AI Studio web, free, no API key):
 //   node tts.mjs prep <naskah.md> [--dir folder] [--voice Nama]   -> potongan.md + rencana.json
@@ -319,19 +319,23 @@ const EL_TAG = {
 };
 // Only eleven_v3 understands [audio tags]; older models (multilingual_v2, flash, turbo) read them
 // aloud, so for those the tags are dropped and only the words (plus pause ellipses) are sent.
-export function toElevenText(text, style, model = EL_DEFAULT_MODEL) {
+// accent: a v3 tag put before every request (e.g. "casual Jakarta accent"); each line is sent on
+// its own, so a tag on the first line alone would not hold for the rest.
+export function toElevenText(text, style, model = EL_DEFAULT_MODEL, accent = '') {
   const tags = /^eleven_v3/.test(model);
-  const lead = tags ? style.map((w) => `[${EL_TAG[w] || w}]`).join(' ') : '';
+  const lead = tags ? [...(accent ? [accent] : []), ...style.map((w) => EL_TAG[w] || w)].map((w) => `[${w}]`).join(' ') : '';
   const body = text.replace(/<([^<>]+)>/g, (_, t) => (/pause$/.test(t) ? '...' : tags ? `[${EL_TAG[t] || t}]` : ''));
   return `${lead} ${body}`.replace(/\s+/g, ' ').trim();
 }
 
-async function synthEleven({ text, voice, model, key }) {
+// lang: language_code sent to the API (default "id"); "auto" leaves it out so the model follows
+// the voice sample, which can keep a cloned voice closer to its own accent.
+async function synthEleven({ text, voice, model, key, lang = 'id' }) {
   const settings = model === 'eleven_v3' ? { stability: 0.5 } : { stability: 0.45, similarity_boost: 0.8, style: 0.3 };
   // pcm_24000 = raw 16-bit mono at the same rate the rest of this script works in
   return elFetch(`/text-to-speech/${encodeURIComponent(voice)}?output_format=pcm_24000`, {
     method: 'POST', key, raw: true,
-    body: { text, model_id: model, language_code: 'id', voice_settings: settings },
+    body: { text, model_id: model, ...(lang === 'auto' ? {} : { language_code: lang }), voice_settings: settings },
   });
 }
 
@@ -458,7 +462,7 @@ async function generate(opts) {
     console.log(`\nStyle dasar:\n  ${style}\n`);
     segs.forEach((s, i) => {
       if (s.silence !== undefined) console.log(`${String(i + 1).padStart(2)}. [jeda ${s.silence.toFixed(2)} dtk]`);
-      else console.log(`${String(i + 1).padStart(2)}. ${eleven ? toElevenText(s.text, s.style, model) : `(${s.style.join(', ') || 'style dasar'}) ${s.text}`}`);
+      else console.log(`${String(i + 1).padStart(2)}. ${eleven ? toElevenText(s.text, s.style, model, opts.accent) : `(${s.style.join(', ') || 'style dasar'}) ${s.text}`}`);
     });
     return;
   }
@@ -475,8 +479,8 @@ async function generate(opts) {
   for (const s of segs) {
     if (s.silence !== undefined) { push(silencePcm(s.silence)); continue; }
     n++;
-    const fullStyle = eleven ? toElevenText(s.text, s.style, model) : styleFor(style, s.style);
-    const hash = createHash('sha256').update(JSON.stringify([eleven ? 'el' : 'g', model, voice, fullStyle, s.text])).digest('hex').slice(0, 16);
+    const fullStyle = eleven ? toElevenText(s.text, s.style, model, opts.accent) : styleFor(style, s.style);
+    const hash = createHash('sha256').update(JSON.stringify([eleven ? 'el:' + (opts.lang || 'id') : 'g', model, voice, fullStyle, s.text])).digest('hex').slice(0, 16);
     const cached = join(cacheDir, `${hash}.pcm`);
     let pcm;
     if (!opts['no-cache'] && existsSync(cached)) {
@@ -485,7 +489,7 @@ async function generate(opts) {
     } else {
       console.log(`  [${n}/${speech.length}] TTS    ${s.text.slice(0, 60)}`);
       try {
-        pcm = eleven ? await synthEleven({ text: fullStyle, voice, model, key }) : await synth({ text: s.text, style: fullStyle, voice, model, key });
+        pcm = eleven ? await synthEleven({ text: fullStyle, voice, model, key, lang: opts.lang }) : await synth({ text: s.text, style: fullStyle, voice, model, key });
       } catch (e) {
         die(`segmen ${n} gagal — ${e.message}\nSegmen yang sudah jadi tersimpan di cache; jalankan ulang untuk melanjutkan.`);
       }

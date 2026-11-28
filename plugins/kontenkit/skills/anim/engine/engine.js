@@ -2723,6 +2723,9 @@
       c.save();
       c.imageSmoothingQuality = 'high';
       if (still) c.translate(q.dx, -Math.abs(q.dy) * 0.5);
+      // a ghost's still pose hovers above the floor (and drifts up and down unless `still`), so it
+      // reads as a ghost and not as someone standing there; `hover: 0` puts it on the ground
+      if (still && P.ghost) c.translate(0, -(ch.hover ?? 34) - (ch.still ? 0 : 9 * (1 + Math.sin((k.lt + (ch.phase || 0)) * 1.3))));
       c.scale(kf, kf);
       // a still pose of a living character stands on its own soles: frames are cut against the
       // sheet's lowest foot, so a standing pose next to a crouch would otherwise hover. Ghost poses
